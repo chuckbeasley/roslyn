@@ -1,4 +1,4 @@
-﻿' Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+' Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 Imports Microsoft.CodeAnalysis.VisualBasic.Syntax
 Imports Microsoft.CodeAnalysis.Test.Utilities
@@ -21,7 +21,7 @@ Class C
 End Class]]>.Value
 
             Dim expectedOperationTree = <![CDATA[
-ITypeOfExpression (OperationKind.TypeOfExpression, Type: System.Type) (Syntax: 'GetType(Integer)')
+ITypeOfOperation (OperationKind.TypeOf, Type: System.Type) (Syntax: 'GetType(Integer)')
   TypeOperand: System.Int32
 ]]>.Value
 
@@ -42,7 +42,7 @@ Class C
 End Class]]>.Value
 
             Dim expectedOperationTree = <![CDATA[
-ITypeOfExpression (OperationKind.TypeOfExpression, Type: System.Type) (Syntax: 'GetType(C)')
+ITypeOfOperation (OperationKind.TypeOf, Type: System.Type) (Syntax: 'GetType(C)')
   TypeOperand: C
 ]]>.Value
 
@@ -63,7 +63,7 @@ Class C
 End Class]]>.Value
 
             Dim expectedOperationTree = <![CDATA[
-ITypeOfExpression (OperationKind.TypeOfExpression, Type: System.Type, IsInvalid) (Syntax: 'GetType(UndefinedType)')
+ITypeOfOperation (OperationKind.TypeOf, Type: System.Type, IsInvalid) (Syntax: 'GetType(UndefinedType)')
   TypeOperand: UndefinedType
 ]]>.Value
 
@@ -88,7 +88,7 @@ Class C
 End Class]]>.Value
 
             Dim expectedOperationTree = <![CDATA[
-ITypeOfExpression (OperationKind.TypeOfExpression, Type: System.Type, IsInvalid) (Syntax: 'GetType(t)')
+ITypeOfOperation (OperationKind.TypeOf, Type: System.Type, IsInvalid) (Syntax: 'GetType(t)')
   TypeOperand: t
 ]]>.Value
 
@@ -117,7 +117,7 @@ Class C
 End Class]]>.Value
 
             Dim expectedOperationTree = <![CDATA[
-ITypeOfExpression (OperationKind.TypeOfExpression, Type: System.Type, IsInvalid) (Syntax: 'GetType(M2())')
+ITypeOfOperation (OperationKind.TypeOf, Type: System.Type, IsInvalid) (Syntax: 'GetType(M2())')
   TypeOperand: M2()
 ]]>.Value
 
@@ -142,7 +142,7 @@ Class C
 End Class]]>.Value
 
             Dim expectedOperationTree = <![CDATA[
-ITypeOfExpression (OperationKind.TypeOfExpression, Type: System.Type, IsInvalid) (Syntax: 'GetType()')
+ITypeOfOperation (OperationKind.TypeOf, Type: System.Type, IsInvalid) (Syntax: 'GetType()')
   TypeOperand: ?
 ]]>.Value
 

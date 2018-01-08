@@ -85,7 +85,7 @@ class C
     static ref int M1(ref int arg) => ref arg;
 
 }";
-            var comp = CompileAndVerify(source, expectedOutput: "44", verify: false);
+            var comp = CompileAndVerify(source, expectedOutput: "44", verify: Verification.Fails);
             comp.VerifyDiagnostics();
 
             comp.VerifyIL("C.Main", @"
@@ -121,7 +121,7 @@ class C
     static int val1 = 33;
     static int val2 = 44;
 }";
-            var comp = CompileAndVerify(source, expectedOutput: "44", verify: false);
+            var comp = CompileAndVerify(source, expectedOutput: "44", verify: Verification.Passes);
             comp.VerifyDiagnostics();
 
             comp.VerifyIL("C.Main", @"
@@ -157,7 +157,7 @@ class C
     static int val1 = 33;
     static int val2 = 44;
 }";
-            var comp = CompileAndVerify(source, expectedOutput: "55", verify: false);
+            var comp = CompileAndVerify(source, expectedOutput: "55", verify: Verification.Passes);
             comp.VerifyDiagnostics();
 
             comp.VerifyIL("C.Main", @"
@@ -195,7 +195,7 @@ class C
     static int val1 = 33;
     static int val2 = 44;
 }";
-            var comp = CompileAndVerify(source, expectedOutput: "5555", verify: false);
+            var comp = CompileAndVerify(source, expectedOutput: "5555", verify: Verification.Passes);
             comp.VerifyDiagnostics();
 
             comp.VerifyIL("C.Main", @"
@@ -242,7 +242,7 @@ class C
     static ref int M1(ref int arg) => ref arg;
 
 }";
-            var comp = CompileAndVerify(source, expectedOutput: "67", verify: false);
+            var comp = CompileAndVerify(source, expectedOutput: "67", verify: Verification.Fails);
             comp.VerifyDiagnostics();
 
             comp.VerifyIL("C.Main", @"
@@ -296,7 +296,7 @@ class C
     static int val1 = 33;
     static int val2 = 44;
 }";
-            var comp = CompileAndVerify(source, expectedOutput: "446767", verify: false);
+            var comp = CompileAndVerify(source, expectedOutput: "446767", verify: Verification.Passes);
             comp.VerifyDiagnostics();
 
             comp.VerifyIL("C.Main", @"
@@ -798,7 +798,7 @@ class C
     }
 }
 ";
-            var comp = CompileAndVerify(source, expectedOutput: "1", verify: false);
+            var comp = CompileAndVerify(source, expectedOutput: "1", verify: Verification.Passes);
             comp.VerifyDiagnostics();
 
             comp.VerifyIL("C.Test", @"
@@ -842,7 +842,7 @@ class C
     }
 }
 ";
-            var comp = CompileAndVerify(source, expectedOutput: "1", verify: false);
+            var comp = CompileAndVerify(source, expectedOutput: "1", verify: Verification.Passes);
             comp.VerifyDiagnostics();
 
             comp.VerifyIL("C.Test", @"
@@ -873,7 +873,7 @@ class C
     static int val2;
 }
 ";
-            var comp = CompileAndVerify(source, expectedOutput: "1", verify: false);
+            var comp = CompileAndVerify(source, expectedOutput: "1", verify: Verification.Passes);
             comp.VerifyDiagnostics();
 
             comp.VerifyIL("C.Main()", @"
@@ -1018,14 +1018,14 @@ class C
 
     public static class S1Ext
     {
-        public static void RoExtension(ref readonly this S1 self)
+        public static void RoExtension(in this S1 self)
         {
             // do nothing
         }
     }
 ";
 
-            var comp = CompileAndVerify(source, additionalRefs: new[] { SystemRuntimeFacadeRef, ValueTupleRef, SystemCoreRef }, expectedOutput: "00", verify: false);
+            var comp = CompileAndVerify(source, additionalRefs: new[] { SystemRuntimeFacadeRef, ValueTupleRef, SystemCoreRef }, expectedOutput: "00", verify: Verification.Fails);
             comp.VerifyDiagnostics();
 
             comp.VerifyIL("Program.Main", @"
@@ -1062,7 +1062,7 @@ class C
   IL_0045:  br.s       IL_004d
   IL_0047:  ldloc.0
   IL_0048:  ldflda     ""S1 C1.field""
-  IL_004d:  call       ""void S1Ext.RoExtension(ref readonly S1)""
+  IL_004d:  call       ""void S1Ext.RoExtension(in S1)""
   IL_0052:  ldloc.0
   IL_0053:  ldflda     ""S1 C1.field""
   IL_0058:  ldfld      ""int S1.value""
@@ -1113,7 +1113,7 @@ class C
     }
 ";
 
-            var comp = CompileAndVerify(source, additionalRefs: new[] { SystemRuntimeFacadeRef, ValueTupleRef }, expectedOutput: "00", verify: false);
+            var comp = CompileAndVerify(source, additionalRefs: new[] { SystemRuntimeFacadeRef, ValueTupleRef }, expectedOutput: "00", verify: Verification.Fails);
             comp.VerifyDiagnostics();
 
             comp.VerifyIL("Program.Test", @"

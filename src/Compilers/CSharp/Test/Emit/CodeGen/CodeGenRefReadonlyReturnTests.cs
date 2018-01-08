@@ -13,7 +13,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void RefReadonlyLocalToField()
         {
-            var comp = CompileAndVerify(@"
+            var source = @"
 struct S
 {
     public int X;
@@ -52,35 +52,57 @@ class C
 
         return ref rs1;
     }
-}");
+}";
+
+            // WithPEVerifyCompatFeature should not cause us to get a ref of a temp in ref assignments
+            var comp = CompileAndVerify(source, parseOptions: TestOptions.Regular.WithPEVerifyCompatFeature(), verify: Verification.Fails);
             comp.VerifyIL("C.M", @"
 {
-  // Code size       65 (0x41)
+  // Code size       59 (0x3b)
   .maxstack  2
-  .locals init (S V_0,
-                S V_1,
-                S2 V_2)
+  .locals init (S V_0)
   IL_0000:  ldsflda    ""S C.s1""
   IL_0005:  dup
   IL_0006:  ldobj      ""S""
   IL_000b:  stloc.0
   IL_000c:  ldloca.s   V_0
   IL_000e:  call       ""void S.AddOne()""
-  IL_0013:  ldsfld     ""S C.s2""
-  IL_0018:  stloc.0
-  IL_0019:  ldloca.s   V_0
-  IL_001b:  ldobj      ""S""
-  IL_0020:  stloc.1
-  IL_0021:  ldloca.s   V_1
-  IL_0023:  call       ""void S.AddOne()""
-  IL_0028:  ldsflda    ""S2 C.s3""
-  IL_002d:  call       ""void S2.AddOne()""
-  IL_0032:  ldarg.0
-  IL_0033:  ldfld      ""S2 C.s4""
-  IL_0038:  stloc.2
-  IL_0039:  ldloca.s   V_2
-  IL_003b:  call       ""void S2.AddOne()""
-  IL_0040:  ret
+  IL_0013:  ldsflda    ""S C.s2""
+  IL_0018:  ldobj      ""S""
+  IL_001d:  stloc.0
+  IL_001e:  ldloca.s   V_0
+  IL_0020:  call       ""void S.AddOne()""
+  IL_0025:  ldsflda    ""S2 C.s3""
+  IL_002a:  call       ""void S2.AddOne()""
+  IL_002f:  ldarg.0
+  IL_0030:  ldflda     ""S2 C.s4""
+  IL_0035:  call       ""void S2.AddOne()""
+  IL_003a:  ret
+}");
+
+            comp = CompileAndVerify(source, verify: Verification.Fails);
+            comp.VerifyIL("C.M", @"
+{
+  // Code size       59 (0x3b)
+  .maxstack  2
+  .locals init (S V_0)
+  IL_0000:  ldsflda    ""S C.s1""
+  IL_0005:  dup
+  IL_0006:  ldobj      ""S""
+  IL_000b:  stloc.0
+  IL_000c:  ldloca.s   V_0
+  IL_000e:  call       ""void S.AddOne()""
+  IL_0013:  ldsflda    ""S C.s2""
+  IL_0018:  ldobj      ""S""
+  IL_001d:  stloc.0
+  IL_001e:  ldloca.s   V_0
+  IL_0020:  call       ""void S.AddOne()""
+  IL_0025:  ldsflda    ""S2 C.s3""
+  IL_002a:  call       ""void S2.AddOne()""
+  IL_002f:  ldarg.0
+  IL_0030:  ldflda     ""S2 C.s4""
+  IL_0035:  call       ""void S2.AddOne()""
+  IL_003a:  ret
 }");
         }
 
@@ -226,7 +248,7 @@ class C
     {
         M(new S(0));
     }
-    static void M(ref readonly S rs)
+    static void M(in S rs)
     {
         Console.WriteLine(rs.X);
         rs.AddOne();
@@ -265,7 +287,7 @@ class C
         ref readonly int rp = ref p;
         return ref rp;
     }
-}", verify: false);
+}", verify: Verification.Fails);
             comp.VerifyIL("C.M", @"
 {
   // Code size        2 (0x2)
@@ -284,7 +306,7 @@ class C
 {
     public static void Main()
     {
-        void L(ref readonly int p)
+        void L(in int p)
         {
             Console.WriteLine(p);
         }
@@ -312,9 +334,9 @@ class C
   IL_0004:  ldc.i4.s   10
   IL_0006:  stloc.1
   IL_0007:  ldloca.s   V_1
-  IL_0009:  call       ""void C.<Main>g__L|0_0(ref readonly int)""
+  IL_0009:  call       ""void C.<Main>g__L|0_0(in int)""
   IL_000e:  ldloca.s   V_0
-  IL_0010:  call       ""void C.<Main>g__L|0_0(ref readonly int)""
+  IL_0010:  call       ""void C.<Main>g__L|0_0(in int)""
   IL_0015:  ldloc.0
   IL_0016:  ldc.i4.1
   IL_0017:  add
@@ -343,15 +365,11 @@ class C
 }");
             verifier.VerifyIL("C.M()", @"
 {
-  // Code size       11 (0xb)
+  // Code size        7 (0x7)
   .maxstack  1
-  .locals init (int V_0)
   IL_0000:  call       ""ref readonly int C.Helper()""
-  IL_0005:  ldind.i4
-  IL_0006:  stloc.0
-  IL_0007:  ldloca.s   V_0
-  IL_0009:  pop
-  IL_000a:  ret
+  IL_0005:  pop
+  IL_0006:  ret
 }");
         }
 
@@ -618,30 +636,18 @@ class Program
 
             var comp = CreateCompilationWithMscorlib45(text, new[] { ValueTupleRef, SystemRuntimeFacadeRef }, options: TestOptions.UnsafeReleaseDll);
             comp.VerifyDiagnostics(
-                // (6,20): error CS0211: Cannot take the address of the given expression
+                // (6,18): error CS0212: You can only take the address of an unfixed expression inside of a fixed statement initializer
                 //         int* a = & M();
-                Diagnostic(ErrorCode.ERR_InvalidAddrOp, "M()").WithLocation(6, 20),
-                // (7,20): error CS0211: Cannot take the address of the given expression
+                Diagnostic(ErrorCode.ERR_FixedNeeded, "& M()").WithLocation(6, 18),
+                // (7,18): error CS0212: You can only take the address of an unfixed expression inside of a fixed statement initializer
                 //         int* b = & M1().Alice;
-                Diagnostic(ErrorCode.ERR_InvalidAddrOp, "M1().Alice").WithLocation(7, 20),
-                // (9,21): error CS0211: Cannot take the address of the given expression
+                Diagnostic(ErrorCode.ERR_FixedNeeded, "& M1().Alice").WithLocation(7, 18),
+                // (9,19): error CS0212: You can only take the address of an unfixed expression inside of a fixed statement initializer
                 //         int* a1 = & P;
-                Diagnostic(ErrorCode.ERR_InvalidAddrOp, "P").WithLocation(9, 21),
-                // (10,21): error CS0211: Cannot take the address of the given expression
+                Diagnostic(ErrorCode.ERR_FixedNeeded, "& P").WithLocation(9, 19),
+                // (10,19): error CS0212: You can only take the address of an unfixed expression inside of a fixed statement initializer
                 //         int* b2 = & P1.Alice;
-                Diagnostic(ErrorCode.ERR_InvalidAddrOp, "P1.Alice").WithLocation(10, 21),
-                // (12,26): error CS0211: Cannot take the address of the given expression
-                //         fixed(int* c = & M())
-                Diagnostic(ErrorCode.ERR_InvalidAddrOp, "M()").WithLocation(12, 26),
-                // (16,26): error CS0211: Cannot take the address of the given expression
-                //         fixed(int* d = & M1().Alice)
-                Diagnostic(ErrorCode.ERR_InvalidAddrOp, "M1().Alice").WithLocation(16, 26),
-                // (20,26): error CS0211: Cannot take the address of the given expression
-                //         fixed(int* c = & P)
-                Diagnostic(ErrorCode.ERR_InvalidAddrOp, "P").WithLocation(20, 26),
-                // (24,26): error CS0211: Cannot take the address of the given expression
-                //         fixed(int* d = & P1.Alice)
-                Diagnostic(ErrorCode.ERR_InvalidAddrOp, "P1.Alice").WithLocation(24, 26)
+                Diagnostic(ErrorCode.ERR_FixedNeeded, "& P1.Alice").WithLocation(10, 19)
             );
         }
 
@@ -745,7 +751,7 @@ class Program
 
 ";
 
-            var comp = CompileAndVerify(text, new[] { ValueTupleRef, SystemRuntimeFacadeRef }, parseOptions: TestOptions.Regular, verify: false);
+            var comp = CompileAndVerify(text, new[] { ValueTupleRef, SystemRuntimeFacadeRef }, parseOptions: TestOptions.Regular, verify: Verification.Passes);
 
             comp.VerifyIL("Program.Test", @"
 {
@@ -823,7 +829,7 @@ class Program
 
 ";
 
-            var comp = CompileAndVerify(text, new[] { ValueTupleRef, SystemRuntimeFacadeRef }, parseOptions: TestOptions.Regular, verify: false);
+            var comp = CompileAndVerify(text, new[] { ValueTupleRef, SystemRuntimeFacadeRef }, parseOptions: TestOptions.Regular, verify: Verification.Fails);
 
             comp.VerifyIL("Program.Test", @"
 {
@@ -853,47 +859,36 @@ class Program
   IL_0033:  ldflda     ""int System.ValueTuple<int, int>.Item1""
   IL_0038:  ret
 }");
-            comp = CompileAndVerify(text, new[] { ValueTupleRef, SystemRuntimeFacadeRef }, parseOptions: TestOptions.Regular.WithPEVerifyCompatFeature(), verify: false);
 
+            // WithPEVerifyCompatFeature should not cause us to get a ref of a temp in ref returns
+            comp = CompileAndVerify(text, new[] { ValueTupleRef, SystemRuntimeFacadeRef }, parseOptions: TestOptions.Regular.WithPEVerifyCompatFeature(), verify: Verification.Fails);
             comp.VerifyIL("Program.Test", @"
 {
-  // Code size       70 (0x46)
+  // Code size       57 (0x39)
   .maxstack  1
-  .locals init (bool V_0, //b
-                int V_1,
-                System.ValueTuple<int, int> V_2,
-                int V_3,
-                System.ValueTuple<int, int> V_4)
+  .locals init (bool V_0) //b
   IL_0000:  ldc.i4.1
   IL_0001:  stloc.0
   IL_0002:  ldloc.0
-  IL_0003:  brfalse.s  IL_0020
+  IL_0003:  brfalse.s  IL_001a
   IL_0005:  ldloc.0
-  IL_0006:  brfalse.s  IL_0012
+  IL_0006:  brfalse.s  IL_000f
   IL_0008:  ldarg.0
-  IL_0009:  ldfld      ""int Program.F""
-  IL_000e:  stloc.1
-  IL_000f:  ldloca.s   V_1
-  IL_0011:  ret
-  IL_0012:  ldsfld     ""(int Alice, int Bob) Program.F1""
-  IL_0017:  stloc.2
-  IL_0018:  ldloca.s   V_2
-  IL_001a:  ldflda     ""int System.ValueTuple<int, int>.Item1""
-  IL_001f:  ret
-  IL_0020:  ldloc.0
-  IL_0021:  brfalse.s  IL_0032
-  IL_0023:  ldarg.0
-  IL_0024:  ldfld      ""Program.S Program.S1""
-  IL_0029:  ldfld      ""int Program.S.F""
-  IL_002e:  stloc.3
-  IL_002f:  ldloca.s   V_3
-  IL_0031:  ret
-  IL_0032:  ldsfld     ""Program.S Program.S2""
-  IL_0037:  ldfld      ""(int Alice, int Bob) Program.S.F1""
-  IL_003c:  stloc.s    V_4
-  IL_003e:  ldloca.s   V_4
-  IL_0040:  ldflda     ""int System.ValueTuple<int, int>.Item1""
-  IL_0045:  ret
+  IL_0009:  ldflda     ""int Program.F""
+  IL_000e:  ret
+  IL_000f:  ldsflda    ""(int Alice, int Bob) Program.F1""
+  IL_0014:  ldflda     ""int System.ValueTuple<int, int>.Item1""
+  IL_0019:  ret
+  IL_001a:  ldloc.0
+  IL_001b:  brfalse.s  IL_0029
+  IL_001d:  ldarg.0
+  IL_001e:  ldflda     ""Program.S Program.S1""
+  IL_0023:  ldflda     ""int Program.S.F""
+  IL_0028:  ret
+  IL_0029:  ldsflda    ""Program.S Program.S2""
+  IL_002e:  ldflda     ""(int Alice, int Bob) Program.S.F1""
+  IL_0033:  ldflda     ""int System.ValueTuple<int, int>.Item1""
+  IL_0038:  ret
 }");
         }
 
@@ -954,7 +949,7 @@ class Program
         return ref this[local];
     }
 
-    ref readonly int this[ref readonly int x] => ref x;
+    ref readonly int this[in int x] => ref x;
 }
 
 ";
@@ -964,9 +959,9 @@ class Program
                 // (8,25): error CS8168: Cannot return local 'local' by reference because it is not a ref local
                 //         return ref this[local];
                 Diagnostic(ErrorCode.ERR_RefReturnLocal, "local").WithArguments("local").WithLocation(8, 25),
-                // (8,20): error CS8521: Cannot use a result of 'Program.this[ref readonly int]' in this context because it may expose variables referenced by parameter 'x' outside of their declaration scope
+                // (8,20): error CS8521: Cannot use a result of 'Program.this[in int]' in this context because it may expose variables referenced by parameter 'x' outside of their declaration scope
                 //         return ref this[local];
-                Diagnostic(ErrorCode.ERR_EscapeCall, "this[local]").WithArguments("Program.this[ref readonly int]", "x").WithLocation(8, 20)
+                Diagnostic(ErrorCode.ERR_EscapeCall, "this[local]").WithArguments("Program.this[in int]", "x").WithLocation(8, 20)
             );
         }
 
@@ -981,7 +976,7 @@ class Program
         return ref this[42];
     }
 
-    ref readonly int this[ref readonly int x] => ref x;
+    ref readonly int this[in int x] => ref x;
 }
 
 ";
@@ -991,9 +986,9 @@ class Program
                 // (6,25): error CS8156: An expression cannot be used in this context because it may not be returned by reference
                 //         return ref this[42];
                 Diagnostic(ErrorCode.ERR_RefReturnLvalueExpected, "42").WithLocation(6, 25),
-                // (6,20): error CS8521: Cannot use a result of 'Program.this[ref readonly int]' in this context because it may expose variables referenced by parameter 'x' outside of their declaration scope
+                // (6,20): error CS8521: Cannot use a result of 'Program.this[in int]' in this context because it may expose variables referenced by parameter 'x' outside of their declaration scope
                 //         return ref this[42];
-                Diagnostic(ErrorCode.ERR_EscapeCall, "this[42]").WithArguments("Program.this[ref readonly int]", "x").WithLocation(6, 20)
+                Diagnostic(ErrorCode.ERR_EscapeCall, "this[42]").WithArguments("Program.this[in int]", "x").WithLocation(6, 20)
             );
         }
 
@@ -1011,7 +1006,7 @@ struct S1
         return ref this;
     }
 
-    ref readonly int this[ref readonly int i] => ref x;
+    ref readonly int this[in int i] => ref x;
 }
 
 ";
@@ -1022,8 +1017,8 @@ struct S1
                 //         return ref this;
                 Diagnostic(ErrorCode.ERR_RefReturnStructThis, "this").WithArguments("this").WithLocation(8, 20),
                 // (11,44): error CS8170: Struct members cannot return 'this' or other instance members by reference
-                //     ref readonly int this[ref readonly int i] => ref x;
-                Diagnostic(ErrorCode.ERR_RefReturnStructThis, "x").WithArguments("this").WithLocation(11, 54)
+                //     in int this[in int i] => ref x;
+                Diagnostic(ErrorCode.ERR_RefReturnStructThis, "x").WithArguments("this").WithLocation(11, 44)
             );
         }
 
@@ -1061,7 +1056,7 @@ class Program
         return ref M(42);
     }
 
-    ref readonly int M(ref readonly int x) => ref x;
+    ref readonly int M(in int x) => ref x;
 }
 
 ";
@@ -1071,9 +1066,9 @@ class Program
                 // (6,22): error CS8156: An expression cannot be used in this context because it may not be returned by reference
                 //         return ref M(42);
                 Diagnostic(ErrorCode.ERR_RefReturnLvalueExpected, "42").WithLocation(6, 22),
-                // (6,20): error CS8521: Cannot use a result of 'Program.M(ref readonly int)' in this context because it may expose variables referenced by parameter 'x' outside of their declaration scope
+                // (6,20): error CS8521: Cannot use a result of 'Program.M(in int)' in this context because it may expose variables referenced by parameter 'x' outside of their declaration scope
                 //         return ref M(42);
-                Diagnostic(ErrorCode.ERR_EscapeCall, "M(42)").WithArguments("Program.M(ref readonly int)", "x").WithLocation(6, 20)
+                Diagnostic(ErrorCode.ERR_EscapeCall, "M(42)").WithArguments("Program.M(in int)", "x").WithLocation(6, 20)
             );
         }
 
@@ -1088,16 +1083,16 @@ class Program
         return ref M();
     }
 
-    ref readonly int M(ref readonly int x = 42) => ref x;
+    ref readonly int M(in int x = 42) => ref x;
 }
 
 ";
 
             var comp = CreateCompilationWithMscorlib45(text, new[] { ValueTupleRef, SystemRuntimeFacadeRef });
             comp.VerifyDiagnostics(
-                // (6,20): error CS8521: Cannot use a result of 'Program.M(ref readonly int)' in this context because it may expose variables referenced by parameter 'x' outside of their declaration scope
+                // (6,20): error CS8521: Cannot use a result of 'Program.M(in int)' in this context because it may expose variables referenced by parameter 'x' outside of their declaration scope
                 //         return ref M();
-                Diagnostic(ErrorCode.ERR_EscapeCall, "M()").WithArguments("Program.M(ref readonly int)", "x").WithLocation(6, 20)
+                Diagnostic(ErrorCode.ERR_EscapeCall, "M()").WithArguments("Program.M(in int)", "x").WithLocation(6, 20)
             );
         }
 
@@ -1113,7 +1108,7 @@ class Program
         return ref M(b);
     }
 
-    ref readonly int M(ref readonly int x) => ref x;
+    ref readonly int M(in int x) => ref x;
 }
 
 ";
@@ -1123,9 +1118,9 @@ class Program
                 // (7,22): error CS8156: An expression cannot be used in this context because it may not be returned by reference
                 //         return ref M(b);
                 Diagnostic(ErrorCode.ERR_RefReturnLvalueExpected, "b").WithLocation(7, 22),
-                // (7,20): error CS8521: Cannot use a result of 'Program.M(ref readonly int)' in this context because it may expose variables referenced by parameter 'x' outside of their declaration scope
+                // (7,20): error CS8521: Cannot use a result of 'Program.M(in int)' in this context because it may expose variables referenced by parameter 'x' outside of their declaration scope
                 //         return ref M(b);
-                Diagnostic(ErrorCode.ERR_EscapeCall, "M(b)").WithArguments("Program.M(ref readonly int)", "x").WithLocation(7, 20)
+                Diagnostic(ErrorCode.ERR_EscapeCall, "M(b)").WithArguments("Program.M(in int)", "x").WithLocation(7, 20)
             );
         }
 
@@ -1157,6 +1152,221 @@ class Program
   IL_0000:  ldnull
   IL_0001:  throw
 }");
+        }
+        
+        [Fact]
+        public void RefExtensionMethod_PassThrough_LocalNoCopying()
+        {
+            CompileAndVerify(@"
+public static class Ext
+{
+    public static ref int M(ref this int p) => ref p;
+}
+class Test
+{
+    void M()
+    {
+        int x = 5;
+        x.M();
+    }
+}", additionalRefs: new[] { SystemCoreRef }, verify: Verification.Fails).VerifyIL("Test.M", @"
+{
+  // Code size       11 (0xb)
+  .maxstack  1
+  .locals init (int V_0) //x
+  IL_0000:  ldc.i4.5
+  IL_0001:  stloc.0
+  IL_0002:  ldloca.s   V_0
+  IL_0004:  call       ""ref int Ext.M(ref int)""
+  IL_0009:  pop
+  IL_000a:  ret
+}");
+        }
+
+        [Fact]
+        public void RefExtensionMethod_PassThrough_FieldNoCopying()
+        {
+            CompileAndVerify(@"
+public static class Ext
+{
+    public static ref int M(ref this int p) => ref p;
+}
+class Test
+{
+    private int x = 5;
+    void M()
+    {
+        x.M();
+    }
+}", additionalRefs: new[] { SystemCoreRef }, verify: Verification.Fails).VerifyIL("Test.M", @"
+{
+  // Code size       13 (0xd)
+  .maxstack  1
+  IL_0000:  ldarg.0
+  IL_0001:  ldflda     ""int Test.x""
+  IL_0006:  call       ""ref int Ext.M(ref int)""
+  IL_000b:  pop
+  IL_000c:  ret
+}");
+        }
+
+        [Fact]
+        public void RefExtensionMethod_PassThrough_ChainNoCopying()
+        {
+            CompileAndVerify(@"
+public static class Ext
+{
+    public static ref int M(ref this int p) => ref p;
+}
+class Test
+{
+    private int x = 5;
+    void M()
+    {
+        x.M().M().M();
+    }
+}", additionalRefs: new[] { SystemCoreRef }, verify: Verification.Fails).VerifyIL("Test.M", @"
+{
+  // Code size       23 (0x17)
+  .maxstack  1
+  IL_0000:  ldarg.0
+  IL_0001:  ldflda     ""int Test.x""
+  IL_0006:  call       ""ref int Ext.M(ref int)""
+  IL_000b:  call       ""ref int Ext.M(ref int)""
+  IL_0010:  call       ""ref int Ext.M(ref int)""
+  IL_0015:  pop
+  IL_0016:  ret
+}");
+        }
+
+        [Fact]
+        public void RefReadOnlyExtensionMethod_PassThrough_TempCopying()
+        {
+            CompileAndVerify(@"
+public static class Ext
+{
+    public static ref readonly int M(in this int p) => ref p;
+}
+class Test
+{
+    void M()
+    {
+        5.M();
+    }
+}", additionalRefs: new[] { SystemCoreRef }, verify: Verification.Fails).VerifyIL("Test.M", @"
+{
+  // Code size       11 (0xb)
+  .maxstack  1
+  .locals init (int V_0)
+  IL_0000:  ldc.i4.5
+  IL_0001:  stloc.0
+  IL_0002:  ldloca.s   V_0
+  IL_0004:  call       ""ref readonly int Ext.M(in int)""
+  IL_0009:  pop
+  IL_000a:  ret
+}");
+        }
+
+        [Fact]
+        public void RefReadOnlyExtensionMethod_PassThrough_LocalNoCopying()
+        {
+            CompileAndVerify(@"
+public static class Ext
+{
+    public static ref readonly int M(in this int p) => ref p;
+}
+class Test
+{
+    void M()
+    {
+        int x = 5;
+        x.M();
+    }
+}", additionalRefs: new[] { SystemCoreRef }, verify: Verification.Fails).VerifyIL("Test.M", @"
+{
+  // Code size       11 (0xb)
+  .maxstack  1
+  .locals init (int V_0) //x
+  IL_0000:  ldc.i4.5
+  IL_0001:  stloc.0
+  IL_0002:  ldloca.s   V_0
+  IL_0004:  call       ""ref readonly int Ext.M(in int)""
+  IL_0009:  pop
+  IL_000a:  ret
+}");
+        }
+
+        [Fact]
+        public void RefReadOnlyExtensionMethod_PassThrough_FieldNoCopying()
+        {
+            CompileAndVerify(@"
+public static class Ext
+{
+    public static ref readonly int M(in this int p) => ref p;
+}
+class Test
+{
+    private int x = 5;
+    void M()
+    {
+        x.M();
+    }
+}", additionalRefs: new[] { SystemCoreRef }, verify: Verification.Fails).VerifyIL("Test.M", @"
+{
+  // Code size       13 (0xd)
+  .maxstack  1
+  IL_0000:  ldarg.0
+  IL_0001:  ldflda     ""int Test.x""
+  IL_0006:  call       ""ref readonly int Ext.M(in int)""
+  IL_000b:  pop
+  IL_000c:  ret
+}");
+        }
+
+        [Fact]
+        public void RefReadOnlyExtensionMethod_PassThrough_ChainNoCopying()
+        {
+            CompileAndVerify(@"
+public static class Ext
+{
+    public static ref readonly int M(in this int p) => ref p;
+}
+class Test
+{
+    private int x = 5;
+    void M()
+    {
+        x.M().M().M();
+    }
+}", additionalRefs: new[] { SystemCoreRef }, verify: Verification.Fails).VerifyIL("Test.M", @"
+{
+  // Code size       23 (0x17)
+  .maxstack  1
+  IL_0000:  ldarg.0
+  IL_0001:  ldflda     ""int Test.x""
+  IL_0006:  call       ""ref readonly int Ext.M(in int)""
+  IL_000b:  call       ""ref readonly int Ext.M(in int)""
+  IL_0010:  call       ""ref readonly int Ext.M(in int)""
+  IL_0015:  pop
+  IL_0016:  ret
+}");
+        }
+
+        [Fact]
+        public void RefReadOnlyReturnOptionalValue()
+        {
+            CompileAndVerify(@"
+class Program
+{
+    static ref readonly string M(in string s = ""optional"") => ref s;
+
+    static void Main()
+    {
+        System.Console.Write(M());
+        System.Console.Write(""-"");
+        System.Console.Write(M(""provided""));
+    }
+}", verify: Verification.Fails, expectedOutput: "optional-provided");
         }
     }
 }

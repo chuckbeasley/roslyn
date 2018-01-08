@@ -11,6 +11,7 @@ Imports Microsoft.CodeAnalysis.Editor.UnitTests.Workspaces
 Imports Microsoft.CodeAnalysis.LanguageServices
 Imports Microsoft.CodeAnalysis.Shared.Extensions
 Imports Microsoft.VisualStudio.LanguageServices.Implementation.ChangeSignature
+Imports Microsoft.VisualStudio.Text.Classification
 Imports Roslyn.Test.Utilities
 Imports Roslyn.Utilities
 
@@ -352,28 +353,33 @@ class MyClass
                 Dim token = Await tree.GetTouchingWordAsync(doc.CursorPosition.Value, workspaceDoc.Project.LanguageServices.GetService(Of ISyntaxFactsService)(), CancellationToken.None)
                 Dim symbol = (Await workspaceDoc.GetSemanticModelAsync()).GetDeclaredSymbol(token.Parent)
 
-                Dim viewModel = New ChangeSignatureDialogViewModel(New TestNotificationService(), ParameterConfiguration.Create(symbol.GetParameters().ToList(), symbol.IsExtensionMethod()), symbol, workspace.ExportProvider.GetExport(Of ClassificationTypeMap)().Value)
+                Dim viewModel = New ChangeSignatureDialogViewModel(
+                    New TestNotificationService(),
+                    ParameterConfiguration.Create(symbol.GetParameters().ToList(), symbol.IsExtensionMethod()),
+                    symbol,
+                    workspace.ExportProvider.GetExportedValue(Of IClassificationFormatMapService)().GetClassificationFormatMap("text"),
+                    workspace.ExportProvider.GetExportedValue(Of ClassificationTypeMap)())
                 Return New ChangeSignatureViewModelTestState(viewModel, symbol.GetParameters())
             End Using
         End Function
 
         <Fact, Trait(Traits.Feature, Traits.Features.ChangeSignature)>
         Public Async Function TestRefKindsDisplayedCorrectly() As Tasks.Task
-            Dim includedInTest = {RefKind.None, RefKind.Ref, RefKind.Out, RefKind.RefReadOnly}
+            Dim includedInTest = {RefKind.None, RefKind.Ref, RefKind.Out, RefKind.In, RefKind.RefReadOnly}
             Assert.Equal(includedInTest, EnumUtilities.GetValues(Of RefKind)())
 
             Dim markup = <Text><![CDATA[
 class Test
 {
-    private void Method$$(int p1, ref int p2, ref readonly int p3, out int p4) { }
+    private void Method$$(int p1, ref int p2, in int p3, out int p4) { }
 }"]]></Text>
 
             Dim state = Await GetViewModelTestStateAsync(markup, LanguageNames.CSharp)
-            VerifyOpeningState(state.ViewModel, "private void Method(int p1, ref int p2, ref readonly int p3, out int p4)")
+            VerifyOpeningState(state.ViewModel, "private void Method(int p1, ref int p2, in int p3, out int p4)")
 
             Assert.Equal("", state.ViewModel.AllParameters(0).Modifier)
             Assert.Equal("ref", state.ViewModel.AllParameters(1).Modifier)
-            Assert.Equal("ref readonly", state.ViewModel.AllParameters(2).Modifier)
+            Assert.Equal("in", state.ViewModel.AllParameters(2).Modifier)
             Assert.Equal("out", state.ViewModel.AllParameters(3).Modifier)
         End Function
     End Class

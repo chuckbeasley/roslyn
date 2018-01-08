@@ -9,7 +9,7 @@ using Microsoft.CodeAnalysis.Collections;
 using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.PooledObjects;
-using Microsoft.CodeAnalysis.Semantics;
+using Microsoft.CodeAnalysis.Operations;
 using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.CSharp
@@ -378,7 +378,14 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                     case BoundKind.Call:
                         var call = (BoundCall)expression;
-                        if (refKind != RefKind.None && refKind != RefKind.RefReadOnly)
+
+                        // NOTE: There are two kinds of 'In' arguments that we may see at this point:
+                        //       - `RefKindExtensions.StrictIn`     (originally specified with 'In' modifier)
+                        //       - `RefKind.In`                     (specified with no modifiers and matched an 'In' parameter)
+                        //
+                        //       It is allowed to spill ordinary `In` arguments by value if reference-preserving spilling is not possible.
+                        //       The "strict" ones do not permit implicit copying, so the same situation should result in an error.
+                        if (refKind != RefKind.None && refKind != RefKind.In)
                         {
                             Debug.Assert(call.Method.RefKind != RefKind.None);
                             _F.Diagnostics.Add(ErrorCode.ERR_RefReturningCallAndAwait, _F.Syntax.Location, call.Method);
@@ -389,9 +396,15 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                     case BoundKind.ConditionalOperator:
                         var conditional = (BoundConditionalOperator)expression;
+                        // NOTE: There are two kinds of 'In' arguments that we may see at this point:
+                        //       - `RefKindExtensions.StrictIn`     (originally specified with 'In' modifier)
+                        //       - `RefKind.In`                     (specified with no modifiers and matched an 'In' parameter)
+                        //
+                        //       It is allowed to spill ordinary `In` arguments by value if reference-preserving spilling is not possible.
+                        //       The "strict" ones do not permit implicit copying, so the same situation should result in an error.
                         if (refKind != RefKind.None && refKind != RefKind.RefReadOnly)
                         {
-                            Debug.Assert(conditional.IsByRef);
+                            Debug.Assert(conditional.IsRef);
                             _F.Diagnostics.Add(ErrorCode.ERR_RefConditionalAndAwait, _F.Syntax.Location);
                         }
                         refKind = RefKind.None;
@@ -727,7 +740,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 builder = leftBuilder;
             }
 
-            return UpdateExpression(builder, node.Update(left, right, node.RefKind, node.Type));
+            return UpdateExpression(builder, node.Update(left, right, node.IsRef, node.Type));
         }
 
         public override BoundNode VisitBadExpression(BoundBadExpression node)
@@ -794,7 +807,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 receiver = node.ReceiverOpt;
                 var refKind = node.Method.ContainingType.IsReadOnly?
-                                                    RefKind.RefReadOnly:
+                                                    RefKind.In:
                                                     ReceiverSpillRefKind(receiver);
 
                 receiver = Spill(receiverBuilder, VisitExpression(ref receiverBuilder, receiver), refKind: refKind);
@@ -825,7 +838,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             if (consequenceBuilder == null && alternativeBuilder == null)
             {
-                return UpdateExpression(conditionBuilder, node.Update(node.IsByRef, condition, consequence, alternative, node.ConstantValueOpt, node.Type));
+                return UpdateExpression(conditionBuilder, node.Update(node.IsRef, condition, consequence, alternative, node.ConstantValueOpt, node.Type));
             }
 
             if (conditionBuilder == null) conditionBuilder = new BoundSpillSequenceBuilder();
