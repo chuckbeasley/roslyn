@@ -1,7 +1,10 @@
-﻿' Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿' Licensed to the .NET Foundation under one or more agreements.
+' The .NET Foundation licenses this file to you under the MIT license.
+' See the LICENSE file in the project root for more information.
 
 Imports System.Threading.Tasks
 Imports Microsoft.CodeAnalysis
+Imports Microsoft.CodeAnalysis.Test.Utilities
 Imports Roslyn.Test.Utilities
 
 Namespace Microsoft.VisualStudio.LanguageServices.UnitTests.CodeModel.VisualBasic
@@ -11,7 +14,7 @@ Namespace Microsoft.VisualStudio.LanguageServices.UnitTests.CodeModel.VisualBasi
 #Region "GetStartPoint() tests"
 
         <WorkItem(639075, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/639075")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestGetStartPoint_SimpleEvent()
             Dim code =
 <Code>
@@ -44,7 +47,7 @@ End Class
         End Sub
 
         <WorkItem(639075, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/639075")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestGetStartPoint_SimpleEventWithAttributes()
             Dim code =
 <Code>
@@ -78,7 +81,7 @@ End Class
         End Sub
 
         <WorkItem(639075, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/639075")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestGetStartPoint_CustomEvent()
             Dim code =
 <Code>
@@ -120,7 +123,7 @@ End Class
         End Sub
 
         <WorkItem(639075, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/639075")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestGetStartPoint_CustomEventWithAttributes()
             Dim code =
 <Code>
@@ -167,7 +170,7 @@ End Class
 #Region "GetEndPoint() tests"
 
         <WorkItem(639075, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/639075")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestGetEndPoint_SimpleEvent()
             Dim code =
 <Code>
@@ -200,7 +203,7 @@ End Class
         End Sub
 
         <WorkItem(639075, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/639075")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestGetEndPoint_SimpleEventWithAttributes()
             Dim code =
 <Code>
@@ -234,7 +237,7 @@ End Class
         End Sub
 
         <WorkItem(639075, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/639075")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestGetEndPoint_CustomEvent()
             Dim code =
 <Code>
@@ -276,7 +279,7 @@ End Class
         End Sub
 
         <WorkItem(639075, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/639075")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestGetEndPoint_CustomEventWithAttributes()
             Dim code =
 <Code>
@@ -322,7 +325,7 @@ End Class
 
 #Region "Access tests"
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestAccess1()
             Dim code =
 <Code>
@@ -334,7 +337,7 @@ End Class
             TestAccess(code, EnvDTE.vsCMAccess.vsCMAccessPublic)
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestAccess2()
             Dim code =
 <Code>
@@ -346,7 +349,7 @@ End Class
             TestAccess(code, EnvDTE.vsCMAccess.vsCMAccessPrivate)
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestAccess3()
             Dim code =
 <Code>
@@ -358,7 +361,7 @@ End Class
             TestAccess(code, EnvDTE.vsCMAccess.vsCMAccessProtected)
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestAccess4()
             Dim code =
 <Code>
@@ -370,7 +373,7 @@ End Class
             TestAccess(code, EnvDTE.vsCMAccess.vsCMAccessProjectOrProtected)
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestAccess5()
             Dim code =
 <Code>
@@ -382,7 +385,7 @@ End Class
             TestAccess(code, EnvDTE.vsCMAccess.vsCMAccessProject)
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestAccess6()
             Dim code =
 <Code>
@@ -398,7 +401,7 @@ End Class
 
 #Region "Attributes"
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestAttributes_SimpleEvent()
             Dim code =
 <Code>
@@ -413,7 +416,7 @@ End Class
             TestAttributes(code, IsElement("CLSCompliant"))
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestAttributes_CustomEvent()
             Dim code =
 <Code>
@@ -439,7 +442,7 @@ End Class
 
 #Region "IsPropertyStyleEvent tests"
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestIsPropertyStyleEvent1()
             Dim code =
 <Code>
@@ -451,7 +454,7 @@ End Class
             TestIsPropertyStyleEvent(code, False)
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestIsPropertyStyleEvent2()
             Dim code =
 <Code>
@@ -463,7 +466,7 @@ End Class
             TestIsPropertyStyleEvent(code, False)
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestIsPropertyStyleEvent3()
             Dim code =
 <Code>
@@ -491,7 +494,7 @@ End Class
 
 #Region "IsShared tests"
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestIsShared1()
             Dim code =
 <Code>
@@ -503,7 +506,7 @@ End Class
             TestIsShared(code, False)
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestIsShared2()
             Dim code =
 <Code>
@@ -515,7 +518,7 @@ End Class
             TestIsShared(code, True)
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestIsShared3()
             Dim code =
 <Code>
@@ -539,7 +542,7 @@ End Class
             TestIsShared(code, False)
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestIsShared4()
             Dim code =
 <Code>
@@ -566,7 +569,7 @@ End Class
 #End Region
 
 #Region "Name tests"
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestName1()
             Dim code =
 <Code>
@@ -582,7 +585,7 @@ End Class
 #Region "OverrideKind tests"
 
         <WorkItem(150349, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/150349")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestOverrideKind_SimpleEvent()
             Dim code =
 <Code>
@@ -595,7 +598,7 @@ End Class
         End Sub
 
         <WorkItem(150349, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/150349")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestOverrideKind_CustomEvent()
             Dim code =
 <Code>
@@ -618,7 +621,7 @@ End Class
 
 #Region "Type tests"
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestType1()
             Dim code =
 <Code>
@@ -636,7 +639,7 @@ End Class
                          })
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestType2()
             Dim code =
 <Code>
@@ -654,7 +657,7 @@ End Class
                          })
         End Sub
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Sub TestType3()
             Dim code =
 <Code>
@@ -685,7 +688,7 @@ End Class
 
 #Region "AddAttribute tests"
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestAddAttribute_SimpleEvent() As Task
             Dim code =
 <Code>
@@ -708,7 +711,7 @@ End Class
             Await TestAddAttribute(code, expected, New AttributeData With {.Name = "Serializable"})
         End Function
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestAddAttribute_CustomEvent() As Task
             Dim code =
 <Code>
@@ -746,7 +749,7 @@ End Class
         End Function
 
         <WorkItem(2825, "https://github.com/dotnet/roslyn/issues/2825")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestAddAttribute_SimpleEvent_BelowDocComment() As Task
             Dim code =
 <Code>
@@ -772,7 +775,7 @@ End Class
         End Function
 
         <WorkItem(2825, "https://github.com/dotnet/roslyn/issues/2825")>
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestAddAttribute_CustomEvent_BelowDocComment() As Task
             Dim code =
 <Code>
@@ -815,7 +818,7 @@ End Class
 
 #Region "Set IsShared tests"
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetIsShared1() As Task
             Dim code =
 <Code>
@@ -834,7 +837,7 @@ End Class
             Await TestSetIsShared(code, expected, False)
         End Function
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetIsShared2() As Task
             Dim code =
 <Code>
@@ -853,7 +856,7 @@ End Class
             Await TestSetIsShared(code, expected, True)
         End Function
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetIsShared3() As Task
             Dim code =
 <Code>
@@ -872,7 +875,7 @@ End Class
             Await TestSetIsShared(code, expected, True)
         End Function
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetIsShared4() As Task
             Dim code =
 <Code>
@@ -891,7 +894,7 @@ End Class
             Await TestSetIsShared(code, expected, False)
         End Function
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetIsShared5() As Task
             Dim code =
 <Code>
@@ -934,7 +937,7 @@ End Class
             Await TestSetIsShared(code, expected, False)
         End Function
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetIsShared6() As Task
             Dim code =
 <Code>
@@ -977,7 +980,7 @@ End Class
             Await TestSetIsShared(code, expected, True)
         End Function
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetIsShared7() As Task
             Dim code =
 <Code>
@@ -1020,7 +1023,7 @@ End Class
             Await TestSetIsShared(code, expected, True)
         End Function
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetIsShared8() As Task
             Dim code =
 <Code>
@@ -1067,7 +1070,7 @@ End Class
 
 #Region "Set Name tests"
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetName1() As Task
             Dim code =
 <Code>
@@ -1090,7 +1093,7 @@ End Class
 
 #Region "Set Type tests"
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetType1() As Task
             Dim code =
 <Code>
@@ -1109,7 +1112,7 @@ End Class
             Await TestSetTypeProp(code, expected, CType(Nothing, EnvDTE.CodeTypeRef), ThrowsArgumentException(Of EnvDTE.CodeTypeRef))
         End Function
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetType2() As Task
             Dim code =
 <Code>
@@ -1128,7 +1131,7 @@ End Class
             Await TestSetTypeProp(code, expected, "System.EventHandler")
         End Function
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetType3() As Task
             Dim code =
 <Code>
@@ -1147,7 +1150,7 @@ End Class
             Await TestSetTypeProp(code, expected, "System.ConsoleCancelEventHandler")
         End Function
 
-        <ConditionalWpfFact(GetType(x86)), Trait(Traits.Feature, Traits.Features.CodeModel)>
+        <WpfFact, Trait(Traits.Feature, Traits.Features.CodeModel)>
         Public Async Function TestSetType4() As Task
             Dim code =
 <Code>

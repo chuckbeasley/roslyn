@@ -1,13 +1,16 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
 
-using System.Threading.Tasks;
+#nullable disable
+
 using Microsoft.CodeAnalysis.Editor.CSharp.DocumentationComments;
-using Microsoft.CodeAnalysis.Editor.Host;
 using Microsoft.CodeAnalysis.Editor.UnitTests.DocumentationComments;
+using Microsoft.CodeAnalysis.Editor.UnitTests.Extensions;
 using Microsoft.CodeAnalysis.Editor.UnitTests.Workspaces;
+using Microsoft.CodeAnalysis.Test.Utilities;
+using Microsoft.VisualStudio.Commanding;
 using Microsoft.VisualStudio.Text.Editor;
-using Microsoft.VisualStudio.Text.Editor.OptionsExtensionMethods;
-using Microsoft.VisualStudio.Text.Operations;
 using Roslyn.Test.Utilities;
 using Xunit;
 
@@ -33,6 +36,56 @@ class C
 }";
 
             VerifyTypingCharacter(code, expected);
+        }
+
+        [WpfFact, Trait(Traits.Feature, Traits.Features.DocumentationComments)]
+        public void TypingCharacter_Record()
+        {
+            var code =
+@"//$$
+record R;";
+
+            var expected =
+@"/// <summary>
+/// $$
+/// </summary>
+record R;";
+
+            VerifyTypingCharacter(code, expected);
+        }
+
+        [WpfFact, Trait(Traits.Feature, Traits.Features.DocumentationComments)]
+        public void TypingCharacter_RecordWithPositionalParameters()
+        {
+            var code =
+@"//$$
+record R(string S, int I);";
+
+            var expected =
+@"/// <summary>
+/// $$
+/// </summary>
+/// <param name=""S""></param>
+/// <param name=""I""></param>
+record R(string S, int I);";
+
+            VerifyTypingCharacter(code, expected);
+        }
+
+        [WpfFact, Trait(Traits.Feature, Traits.Features.DocumentationComments)]
+        public void TypingCharacter_Class_NewLine()
+        {
+            var code = "//$$\r\nclass C\r\n{\r\n}";
+
+            var expected = "/// <summary>\n/// $$\n/// </summary>\r\nclass C\r\n{\r\n}";
+
+            VerifyTypingCharacter(code, expected, newLine: "\n");
+
+            code = "//$$\r\nclass C\r\n{\r\n}";
+
+            expected = "/// <summary>\r\n/// $$\r\n/// </summary>\r\nclass C\r\n{\r\n}";
+
+            VerifyTypingCharacter(code, expected, newLine: "\r\n");
         }
 
         [WpfFact, Trait(Traits.Feature, Traits.Features.DocumentationComments)]
@@ -1085,7 +1138,6 @@ class C
             VerifyPressingEnter(code, expected, autoGenerateXmlDocComments: false);
         }
 
-
         [WpfFact, Trait(Traits.Feature, Traits.Features.DocumentationComments)]
         public void PressingEnter_DontInsertSlashes1()
         {
@@ -1122,6 +1174,32 @@ class C{}";
 ///
 $$
 class C{}";
+            VerifyPressingEnter(code, expected);
+        }
+
+        [WpfFact, Trait(Traits.Feature, Traits.Features.DocumentationComments)]
+        [WorkItem(25746, "https://github.com/dotnet/roslyn/issues/25746")]
+        public void PressingEnter_ExtraSlashesAfterExteriorTrivia()
+        {
+            var code =
+@"class C
+{
+C()
+{
+//////$$
+}
+}";
+
+            var expected =
+@"class C
+{
+C()
+{
+//////
+///$$
+}
+}";
+
             VerifyPressingEnter(code, expected);
         }
 
@@ -1305,24 +1383,24 @@ static void Main(string[] args)
             const string code =
 @"class C
 {
-    /// <summary>
+	/// <summary>
 	///     hello world$$
-    /// </summary>
-    void M()
-    {
-    }
+	/// </summary>
+	void M()
+	{
+	}
 }";
 
             const string expected =
 @"class C
 {
-    /// <summary>
+	/// <summary>
 	///     hello world
 	///     $$
-    /// </summary>
-    void M()
-    {
-    }
+	/// </summary>
+	void M()
+	{
+	}
 }";
 
             VerifyPressingEnter(code, expected, useTabs: true);
@@ -1375,6 +1453,36 @@ class C
         }
 
         [WpfFact, Trait(Traits.Feature, Traits.Features.DocumentationComments)]
+        [WorkItem(27223, "https://github.com/dotnet/roslyn/issues/27223")]
+        public void PressingEnter_XmldocInStringLiteral()
+        {
+            var code =
+@"class C
+{
+C()
+{
+string s = @""
+/// <summary>$$</summary>
+void M() {}""
+}
+}";
+
+            var expected =
+@"class C
+{
+C()
+{
+string s = @""
+/// <summary>
+/// $$</summary>
+void M() {}""
+}
+}";
+
+            VerifyPressingEnter(code, expected);
+        }
+
+        [WpfFact, Trait(Traits.Feature, Traits.Features.DocumentationComments)]
         public void Command_Class()
         {
             var code =
@@ -1389,6 +1497,36 @@ class C
 class C
 {
 }";
+
+            VerifyInsertCommentCommand(code, expected);
+        }
+
+        [WpfFact, Trait(Traits.Feature, Traits.Features.DocumentationComments)]
+        public void Command_Record()
+        {
+            var code = "record R$$;";
+
+            var expected =
+@"/// <summary>
+/// $$
+/// </summary>
+record R;";
+
+            VerifyInsertCommentCommand(code, expected);
+        }
+
+        [WpfFact, Trait(Traits.Feature, Traits.Features.DocumentationComments)]
+        public void Command_RecordWithPositionalParameters()
+        {
+            var code = "record R$$(string S, int I);";
+
+            var expected =
+@"/// <summary>
+/// $$
+/// </summary>
+/// <param name=""S""></param>
+/// <param name=""I""></param>
+record R(string S, int I);";
 
             VerifyInsertCommentCommand(code, expected);
         }
@@ -1748,11 +1886,11 @@ $$
 @"class C
 {
 		  /// <summary>
-    /// $$stuff
-    /// </summary>
-    void M()
-    {
-    }
+	/// $$stuff
+	/// </summary>
+	void M()
+	{
+	}
 }";
 
             const string expected =
@@ -1760,11 +1898,11 @@ $$
 {
 		  /// <summary>
 		  /// $$
-    /// stuff
-    /// </summary>
-    void M()
-    {
-    }
+	/// stuff
+	/// </summary>
+	void M()
+	{
+	}
 }";
 
             VerifyOpenLineAbove(code, expected, useTabs: true);
@@ -1857,24 +1995,24 @@ $$
             const string code =
 @"class C
 {
-    /// <summary>
+	/// <summary>
 		  /// $$stuff
-    /// </summary>
-    void M()
-    {
-    }
+	/// </summary>
+	void M()
+	{
+	}
 }";
 
             const string expected =
 @"class C
 {
-    /// <summary>
+	/// <summary>
 		  /// stuff
 		  /// $$
-    /// </summary>
-    void M()
-    {
-    }
+	/// </summary>
+	void M()
+	{
+	}
 }";
 
             VerifyOpenLineBelow(code, expected, useTabs: true);
@@ -1911,7 +2049,6 @@ class C { }";
                 TestWorkspace.CreateCSharp("").GetService<IEditorOptionsFactoryService>().GlobalOptions
                         .SetOptionValue(DefaultOptions.TrimTrailingWhiteSpaceOptionName, false);
             }
-            
         }
 
         protected override char DocumentationCommentCharacter
@@ -1919,12 +2056,9 @@ class C { }";
             get { return '/'; }
         }
 
-        internal override ICommandHandler CreateCommandHandler(
-            IWaitIndicator waitIndicator,
-            ITextUndoHistoryRegistry undoHistoryRegistry,
-            IEditorOperationsFactoryService editorOperationsFactoryService)
+        internal override ICommandHandler CreateCommandHandler(TestWorkspace workspace)
         {
-            return new DocumentationCommentCommandHandler(waitIndicator, undoHistoryRegistry, editorOperationsFactoryService);
+            return workspace.ExportProvider.GetCommandHandler<DocumentationCommentCommandHandler>(PredefinedCommandHandlerNames.DocumentationComments, ContentTypeNames.CSharpContentType);
         }
 
         protected override TestWorkspace CreateTestWorkspace(string code)

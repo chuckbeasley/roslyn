@@ -1,10 +1,13 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
 
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
+using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Microsoft.CodeAnalysis
@@ -69,13 +72,13 @@ namespace Microsoft.CodeAnalysis
         /// <param name="node">The expression or statement syntax node.</param>
         /// <param name="cancellationToken">An optional cancellation token.</param>
         /// <returns></returns>
-        public IOperation GetOperation(SyntaxNode node, CancellationToken cancellationToken = default(CancellationToken))
+        public IOperation? GetOperation(SyntaxNode node, CancellationToken cancellationToken = default(CancellationToken))
         {
             try
             {
                 return GetOperationCore(node, cancellationToken);
             }
-            catch (Exception e) when (FatalError.ReportWithoutCrashUnlessCanceled(e))
+            catch (Exception e) when (FatalError.ReportAndCatchUnlessCanceled(e, cancellationToken))
             {
                 // Log a Non-fatal-watson and then ignore the crash in the attempt of getting operation
                 Debug.Assert(false, "\n" + e.ToString());
@@ -84,14 +87,7 @@ namespace Microsoft.CodeAnalysis
             return null;
         }
 
-        protected abstract IOperation GetOperationCore(SyntaxNode node, CancellationToken cancellationToken);
-
-        /// <summary>
-        /// Deep Clone given IOperation
-        /// </summary>
-        internal T CloneOperation<T>(T operation) where T : IOperation => (T)CloneOperationCore(operation);
-
-        internal abstract IOperation CloneOperationCore(IOperation operation);
+        protected abstract IOperation? GetOperationCore(SyntaxNode node, CancellationToken cancellationToken);
 
         /// <summary>
         /// Returns true if this is a SemanticModel that ignores accessibility rules when answering semantic questions.
@@ -232,7 +228,7 @@ namespace Microsoft.CodeAnalysis
         /// <param name="nameSyntax">Name to get alias info for.</param>
         /// <param name="cancellationToken">A cancellation token that can be used to cancel the
         /// process of obtaining the alias information.</param>
-        internal IAliasSymbol GetAliasInfo(SyntaxNode nameSyntax, CancellationToken cancellationToken = default(CancellationToken))
+        internal IAliasSymbol? GetAliasInfo(SyntaxNode nameSyntax, CancellationToken cancellationToken = default(CancellationToken))
         {
             return GetAliasInfoCore(nameSyntax, cancellationToken);
         }
@@ -244,11 +240,12 @@ namespace Microsoft.CodeAnalysis
         /// <param name="nameSyntax">Name to get alias info for.</param>
         /// <param name="cancellationToken">A cancellation token that can be used to cancel the
         /// process of obtaining the alias information.</param>
-        protected abstract IAliasSymbol GetAliasInfoCore(SyntaxNode nameSyntax, CancellationToken cancellationToken = default(CancellationToken));
+        protected abstract IAliasSymbol? GetAliasInfoCore(SyntaxNode nameSyntax, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Returns true if this is a speculative semantic model created with any of the TryGetSpeculativeSemanticModel methods.
         /// </summary>
+        [MemberNotNullWhen(true, nameof(ParentModel))]
         public abstract bool IsSpeculativeSemanticModel
         {
             get;
@@ -267,7 +264,7 @@ namespace Microsoft.CodeAnalysis
         /// If this is a speculative semantic model, then returns its parent semantic model.
         /// Otherwise, returns null.
         /// </summary>
-        public SemanticModel ParentModel
+        public SemanticModel? ParentModel
         {
             get { return this.ParentModelCore; }
         }
@@ -276,7 +273,16 @@ namespace Microsoft.CodeAnalysis
         /// If this is a speculative semantic model, then returns its parent semantic model.
         /// Otherwise, returns null.
         /// </summary>
-        protected abstract SemanticModel ParentModelCore
+        protected abstract SemanticModel? ParentModelCore
+        {
+            get;
+        }
+
+        /// <summary>
+        /// If this is a non-speculative member semantic model, then returns the containing semantic model for the entire tree.
+        /// Otherwise, returns this instance of the semantic model.
+        /// </summary>
+        internal abstract SemanticModel ContainingModelOrSelf
         {
             get;
         }
@@ -297,7 +303,7 @@ namespace Microsoft.CodeAnalysis
         /// expression should derive from TypeSyntax.</param>
         /// <remarks>The passed in name is interpreted as a stand-alone name, as if it
         /// appeared by itself somewhere within the scope that encloses "position".</remarks>
-        internal IAliasSymbol GetSpeculativeAliasInfo(int position, SyntaxNode nameSyntax, SpeculativeBindingOption bindingOption)
+        internal IAliasSymbol? GetSpeculativeAliasInfo(int position, SyntaxNode nameSyntax, SpeculativeBindingOption bindingOption)
         {
             return GetSpeculativeAliasInfoCore(position, nameSyntax, bindingOption);
         }
@@ -318,7 +324,7 @@ namespace Microsoft.CodeAnalysis
         /// expression should derive from TypeSyntax.</param>
         /// <remarks>The passed in name is interpreted as a stand-alone name, as if it
         /// appeared by itself somewhere within the scope that encloses "position".</remarks>
-        protected abstract IAliasSymbol GetSpeculativeAliasInfoCore(int position, SyntaxNode nameSyntax, SpeculativeBindingOption bindingOption);
+        protected abstract IAliasSymbol? GetSpeculativeAliasInfoCore(int position, SyntaxNode nameSyntax, SpeculativeBindingOption bindingOption);
 
         /// <summary>
         /// Get all of the syntax errors within the syntax tree associated with this
@@ -384,7 +390,7 @@ namespace Microsoft.CodeAnalysis
         /// UsingDirectiveSyntax</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The symbol declared by the node or null if the node is not a declaration.</returns>
-        internal ISymbol GetDeclaredSymbolForNode(SyntaxNode declaration, CancellationToken cancellationToken = default(CancellationToken))
+        internal ISymbol? GetDeclaredSymbolForNode(SyntaxNode declaration, CancellationToken cancellationToken = default(CancellationToken))
         {
             return GetDeclaredSymbolCore(declaration, cancellationToken);
         }
@@ -398,7 +404,7 @@ namespace Microsoft.CodeAnalysis
         /// UsingDirectiveSyntax</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>The symbol declared by the node or null if the node is not a declaration.</returns>
-        protected abstract ISymbol GetDeclaredSymbolCore(SyntaxNode declaration, CancellationToken cancellationToken = default(CancellationToken));
+        protected abstract ISymbol? GetDeclaredSymbolCore(SyntaxNode declaration, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Gets the symbol associated with a declaration syntax node. Unlike <see cref="GetDeclaredSymbolForNode(SyntaxNode, CancellationToken)"/>,
@@ -452,8 +458,8 @@ namespace Microsoft.CodeAnalysis
         /// </remarks>
         public ImmutableArray<ISymbol> LookupSymbols(
             int position,
-            INamespaceOrTypeSymbol container = null,
-            string name = null,
+            INamespaceOrTypeSymbol? container = null,
+            string? name = null,
             bool includeReducedExtensionMethods = false)
         {
             return LookupSymbolsCore(position, container, name, includeReducedExtensionMethods);
@@ -464,8 +470,8 @@ namespace Microsoft.CodeAnalysis
         /// </summary>
         protected abstract ImmutableArray<ISymbol> LookupSymbolsCore(
             int position,
-            INamespaceOrTypeSymbol container,
-            string name,
+            INamespaceOrTypeSymbol? container,
+            string? name,
             bool includeReducedExtensionMethods);
 
         /// <summary>
@@ -505,7 +511,7 @@ namespace Microsoft.CodeAnalysis
         /// </remarks>
         public ImmutableArray<ISymbol> LookupBaseMembers(
             int position,
-            string name = null)
+            string? name = null)
         {
             return LookupBaseMembersCore(position, name);
         }
@@ -515,7 +521,7 @@ namespace Microsoft.CodeAnalysis
         /// </summary>
         protected abstract ImmutableArray<ISymbol> LookupBaseMembersCore(
             int position,
-            string name);
+            string? name);
 
         /// <summary>
         /// Gets the available named static member symbols in the context of the specified location and optional container.
@@ -539,8 +545,8 @@ namespace Microsoft.CodeAnalysis
         /// </remarks>
         public ImmutableArray<ISymbol> LookupStaticMembers(
             int position,
-            INamespaceOrTypeSymbol container = null,
-            string name = null)
+            INamespaceOrTypeSymbol? container = null,
+            string? name = null)
         {
             return LookupStaticMembersCore(position, container, name);
         }
@@ -550,8 +556,8 @@ namespace Microsoft.CodeAnalysis
         /// </summary>
         protected abstract ImmutableArray<ISymbol> LookupStaticMembersCore(
             int position,
-            INamespaceOrTypeSymbol container,
-            string name);
+            INamespaceOrTypeSymbol? container,
+            string? name);
 
         /// <summary>
         /// Gets the available named namespace and type symbols in the context of the specified location and optional container.
@@ -573,8 +579,8 @@ namespace Microsoft.CodeAnalysis
         /// </remarks>
         public ImmutableArray<ISymbol> LookupNamespacesAndTypes(
             int position,
-            INamespaceOrTypeSymbol container = null,
-            string name = null)
+            INamespaceOrTypeSymbol? container = null,
+            string? name = null)
         {
             return LookupNamespacesAndTypesCore(position, container, name);
         }
@@ -584,8 +590,8 @@ namespace Microsoft.CodeAnalysis
         /// </summary>
         protected abstract ImmutableArray<ISymbol> LookupNamespacesAndTypesCore(
             int position,
-            INamespaceOrTypeSymbol container,
-            string name);
+            INamespaceOrTypeSymbol? container,
+            string? name);
 
         /// <summary>
         /// Gets the available named label symbols in the context of the specified location and optional container.
@@ -603,7 +609,7 @@ namespace Microsoft.CodeAnalysis
         /// </remarks>
         public ImmutableArray<ISymbol> LookupLabels(
             int position,
-            string name = null)
+            string? name = null)
         {
             return LookupLabelsCore(position, name);
         }
@@ -613,7 +619,7 @@ namespace Microsoft.CodeAnalysis
         /// </summary>
         protected abstract ImmutableArray<ISymbol> LookupLabelsCore(
             int position,
-            string name);
+            string? name);
 
         /// <summary>
         /// Analyze control-flow within a part of a method body.
@@ -732,7 +738,7 @@ namespace Microsoft.CodeAnalysis
         /// HasValue set to true and with Value set to the constant.  If the node does not have an
         /// constant value, an Optional will be returned with HasValue set to false.
         /// </summary>
-        public Optional<object> GetConstantValue(SyntaxNode node, CancellationToken cancellationToken = default(CancellationToken))
+        public Optional<object?> GetConstantValue(SyntaxNode node, CancellationToken cancellationToken = default(CancellationToken))
         {
             return GetConstantValueCore(node, cancellationToken);
         }
@@ -742,7 +748,7 @@ namespace Microsoft.CodeAnalysis
         /// HasValue set to true and with Value set to the constant.  If the node does not have an
         /// constant value, an Optional will be returned with HasValue set to false.
         /// </summary>
-        protected abstract Optional<object> GetConstantValueCore(SyntaxNode node, CancellationToken cancellationToken = default(CancellationToken));
+        protected abstract Optional<object?> GetConstantValueCore(SyntaxNode node, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// When getting information for a symbol that resolves to a method group or property group,
@@ -765,7 +771,7 @@ namespace Microsoft.CodeAnalysis
         /// Given a position in the SyntaxTree for this SemanticModel returns the innermost Symbol
         /// that the position is considered inside of.
         /// </summary>
-        public ISymbol GetEnclosingSymbol(int position, CancellationToken cancellationToken = default(CancellationToken))
+        public ISymbol? GetEnclosingSymbol(int position, CancellationToken cancellationToken = default(CancellationToken))
         {
             return GetEnclosingSymbolCore(position, cancellationToken);
         }
@@ -774,7 +780,7 @@ namespace Microsoft.CodeAnalysis
         /// Given a position in the SyntaxTree for this SemanticModel returns the innermost Symbol
         /// that the position is considered inside of.
         /// </summary>
-        protected abstract ISymbol GetEnclosingSymbolCore(int position, CancellationToken cancellationToken = default(CancellationToken));
+        protected abstract ISymbol? GetEnclosingSymbolCore(int position, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <summary>
         /// Determines if the symbol is accessible from the specified location.
@@ -859,12 +865,14 @@ namespace Microsoft.CodeAnalysis
         /// If false, then <see cref="DeclarationInfo.DeclaredSymbol"/> is always null.</param>
         /// <param name="builder">Builder to add declarations.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        internal abstract void ComputeDeclarationsInSpan(TextSpan span, bool getSymbol, List<DeclarationInfo> builder, CancellationToken cancellationToken);
+        internal abstract void ComputeDeclarationsInSpan(TextSpan span, bool getSymbol, ArrayBuilder<DeclarationInfo> builder, CancellationToken cancellationToken);
 
         /// <summary>
         /// Takes a node and returns a set of declarations that overlap the node's span.
         /// </summary>
-        internal abstract void ComputeDeclarationsInNode(SyntaxNode node, bool getSymbol, List<DeclarationInfo> builder, CancellationToken cancellationToken, int? levelsToCompute = null);
+        internal abstract void ComputeDeclarationsInNode(SyntaxNode node, ISymbol associatedSymbol, bool getSymbol, ArrayBuilder<DeclarationInfo> builder, CancellationToken cancellationToken, int? levelsToCompute = null);
+
+        internal virtual Func<SyntaxNode, bool>? GetSyntaxNodesToAnalyzeFilter(SyntaxNode declaredNode, ISymbol declaredSymbol) => null;
 
         /// <summary>
         /// Takes a Symbol and syntax for one of its declaring syntax reference and returns the topmost syntax node to be used by syntax analyzer.
@@ -883,5 +891,11 @@ namespace Microsoft.CodeAnalysis
         /// Root of this semantic model
         /// </summary>
         protected abstract SyntaxNode RootCore { get; }
+
+        /// <summary>
+        /// Gets the <see cref="NullableContext"/> at a position in the file.
+        /// </summary>
+        /// <param name="position">The position to get the context for.</param>
+        public abstract NullableContext GetNullableContext(int position);
     }
 }

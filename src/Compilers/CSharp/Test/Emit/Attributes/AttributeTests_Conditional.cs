@@ -1,17 +1,18 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
+
+#nullable disable
 
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using Microsoft.CodeAnalysis.CSharp.Symbols.Metadata.PE;
 using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp.Test.Utilities;
-using Microsoft.CodeAnalysis.CSharp.UnitTests.Emit;
-using Microsoft.CodeAnalysis.Test.Utilities;
 using Roslyn.Test.Utilities;
 using Xunit;
-using System.Collections.Generic;
 
 namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 {
@@ -248,7 +249,7 @@ public class Test
             // Scenario to test Conditional directive stack creation during SyntaxTree.Create, see Devdiv Bug #13846 for details.
             CompilationUnitSyntax root = SyntaxFactory.ParseCompilationUnit(testSource);
             var syntaxTree = SyntaxFactory.SyntaxTree(root);
-            var compilation = CreateStandardCompilation(syntaxTree, options: TestOptions.ReleaseExe);
+            var compilation = CreateCompilation(syntaxTree, options: TestOptions.ReleaseExe);
             CompileAndVerify(compilation, sourceSymbolValidator: CommonSourceValidatorForCondAttrType, symbolValidator: CommonMetadataValidatorForCondAttrType, expectedOutput: "");
         }
 
@@ -264,8 +265,8 @@ using System;
             CompileAndVerify(testSources, sourceSymbolValidator: CommonSourceValidatorForCondAttrType, symbolValidator: CommonMetadataValidatorForCondAttrType, expectedOutput: "");
 
             // Different source files, different compilation
-            var comp1 = CreateStandardCompilation(source1);
-            CompileAndVerify(source2, additionalRefs: new[] { comp1.ToMetadataReference() }, sourceSymbolValidator: CommonSourceValidatorForCondAttrType, symbolValidator: CommonMetadataValidatorForCondAttrType, expectedOutput: "");
+            var comp1 = CreateCompilation(source1);
+            CompileAndVerify(source2, references: new[] { comp1.ToMetadataReference() }, sourceSymbolValidator: CommonSourceValidatorForCondAttrType, symbolValidator: CommonMetadataValidatorForCondAttrType, expectedOutput: "");
         }
 
         #endregion
@@ -459,7 +460,7 @@ Z.PreservedCalls_MultipleConditional_Method";
             // Scenario to test Conditional directive stack creation during SyntaxTree.Create, see Devdiv Bug #13846 for details.
             CompilationUnitSyntax root = SyntaxFactory.ParseCompilationUnit(testSource);
             var syntaxTree = SyntaxFactory.SyntaxTree(root);
-            var compilation = CreateStandardCompilation(syntaxTree, options: TestOptions.ReleaseExe);
+            var compilation = CreateCompilation(syntaxTree, options: TestOptions.ReleaseExe);
             CompileAndVerify(compilation, expectedOutput: s_commonExpectedOutput_ConditionalMethodsTest);
         }
 
@@ -475,8 +476,8 @@ using System;
             CompileAndVerify(testSources, expectedOutput: s_commonExpectedOutput_ConditionalMethodsTest);
 
             // Different source files, different compilation
-            var comp1 = CreateStandardCompilation(source1, assemblyName: Guid.NewGuid().ToString());
-            CompileAndVerify(source2, additionalRefs: new[] { comp1.ToMetadataReference() }, expectedOutput: s_commonExpectedOutput_ConditionalMethodsTest);
+            var comp1 = CreateCompilation(source1, assemblyName: Guid.NewGuid().ToString());
+            CompileAndVerify(source2, references: new[] { comp1.ToMetadataReference() }, expectedOutput: s_commonExpectedOutput_ConditionalMethodsTest);
         }
 
         #endregion
@@ -554,7 +555,7 @@ using System;
         [Fact, WorkItem(529683, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/529683")]
         public void CondMethodInDelegateCreationExpr()
         {
-            var compilation = CreateStandardCompilation(@"
+            var compilation = CreateCompilation(@"
 using System.Diagnostics;
 
 class Test
@@ -668,7 +669,7 @@ class Bar
     public static string M() { return ""str""; }
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (12,33): error CS0428: Cannot convert method group 'M' to non-delegate type 'string'. Did you intend to invoke the method?
                 //     public const string M = Bar.M;
                 Diagnostic(ErrorCode.ERR_MethGrpToNonDel, "M").WithArguments("M", "string"),
@@ -684,6 +685,29 @@ class Bar
                 // (6,14): error CS0182: An attribute argument must be a constant expression, typeof expression or array creation expression of an attribute parameter type
                 // [Conditional(Goo.M)]
                 Diagnostic(ErrorCode.ERR_BadAttributeArgument, "Goo.M"));
+        }
+
+        [Fact]
+        public void ConditionalAttributeArgument_Null()
+        {
+            var source =
+@"using System.Diagnostics;
+class Program
+{
+    [Conditional(""A"")]
+    [Conditional(null)]
+    [Conditional(""B"")]
+    static void Main()
+    {
+    }
+}";
+            var comp = CreateCompilation(source);
+            comp.VerifyDiagnostics(
+                // (5,18): error CS0633: The argument to the 'Conditional' attribute must be a valid identifier
+                //     [Conditional(null)]
+                Diagnostic(ErrorCode.ERR_BadArgumentToAttribute, "null").WithArguments("Conditional").WithLocation(5, 18));
+            var method = comp.GetMember<MethodSymbol>("Program.Main");
+            Assert.Equal(new[] { "A", null, "B" }, method.GetAppliedConditionalSymbols());
         }
 
         #endregion

@@ -1,69 +1,105 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
+
+#nullable disable
 
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using RunTests.Cache;
-using Newtonsoft.Json.Linq;
-using RestSharp;
 using System.Collections.Immutable;
-using Newtonsoft.Json;
-using System.Reflection;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace RunTests
 {
     internal sealed partial class Program
     {
+        private static readonly ImmutableHashSet<string> PrimaryProcessNames = ImmutableHashSet.Create(
+            StringComparer.OrdinalIgnoreCase,
+            "devenv",
+            "xunit.console",
+            "xunit.console.x86",
+            "ServiceHub.RoslynCodeAnalysisService",
+            "ServiceHub.RoslynCodeAnalysisService32");
+
         internal const int ExitSuccess = 0;
         internal const int ExitFailure = 1;
 
-        private const long MaxTotalDumpSizeInMegabytes = 4096; 
+        private const long MaxTotalDumpSizeInMegabytes = 4096;
 
-        internal static int Main(string[] args)
+        internal static async Task<int> Main(string[] args)
         {
             Logger.Log("RunTest command line");
             Logger.Log(string.Join(" ", args));
-
             var options = Options.Parse(args);
             if (options == null)
             {
-                Options.PrintUsage();
                 return ExitFailure;
             }
 
-            // Setup cancellation for ctrl-c key presses
-            var cts = new CancellationTokenSource();
-            Console.CancelKeyPress += delegate
-            {
-                cts.Cancel();
-            };
+            ConsoleUtil.WriteLine($"Running '{options.DotnetFilePath} --version'..");
+            var dotnetResult = await ProcessRunner.CreateProcess(options.DotnetFilePath, arguments: "--version", captureOutput: true).Result;
+            ConsoleUtil.WriteLine(string.Join(Environment.NewLine, dotnetResult.OutputLines));
+            ConsoleUtil.WriteLine(ConsoleColor.Red, string.Join(Environment.NewLine, dotnetResult.ErrorLines));
 
-            var result = Run(options, cts.Token).GetAwaiter().GetResult();
-            CheckTotalDumpFilesSize();
-            return result;
+            if (options.CollectDumps)
+            {
+                if (!DumpUtil.IsAdministrator())
+                {
+                    ConsoleUtil.WriteLine(ConsoleColor.Yellow, "Dump collection specified but user is not administrator so cannot modify registry");
+                }
+                else
+                {
+                    DumpUtil.EnableRegistryDumpCollection(options.LogFilesDirectory);
+                }
+            }
+
+            try
+            {
+                // Setup cancellation for ctrl-c key presses
+                using var cts = new CancellationTokenSource();
+                Console.CancelKeyPress += delegate
+                {
+                    cts.Cancel();
+                    DisableRegistryDumpCollection();
+                };
+
+                int result;
+                if (options.Timeout is { } timeout)
+                {
+                    result = await RunAsync(options, timeout, cts.Token);
+                }
+                else
+                {
+                    result = await RunAsync(options, cts.Token);
+                }
+
+                CheckTotalDumpFilesSize();
+                return result;
+            }
+            finally
+            {
+                DisableRegistryDumpCollection();
+            }
+
+            void DisableRegistryDumpCollection()
+            {
+                if (options.CollectDumps && DumpUtil.IsAdministrator())
+                {
+                    DumpUtil.DisableRegistryDumpCollection();
+                }
+            }
         }
 
-        private static async Task<int> Run(Options options, CancellationToken cancellationToken)
+        private static async Task<int> RunAsync(Options options, TimeSpan timeout, CancellationToken cancellationToken)
         {
-            if (options.Timeout == null)
-            {
-                return await RunCore(options, cancellationToken);
-            }
-
-            var timeoutTask = Task.Delay(options.Timeout.Value);
-            var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var runTask = RunCore(options, cts.Token);
-
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return ExitFailure;
-            }
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var runTask = RunAsync(options, cts.Token);
+            var timeoutTask = Task.Delay(options.Timeout.Value, cancellationToken);
 
             var finishedTask = await Task.WhenAny(timeoutTask, runTask);
             if (finishedTask == timeoutTask)
@@ -88,33 +124,32 @@ namespace RunTests
             return await runTask;
         }
 
-        private static async Task<int> RunCore(Options options, CancellationToken cancellationToken)
+        private static async Task<int> RunAsync(Options options, CancellationToken cancellationToken)
         {
-            if (!CheckAssemblyList(options))
-            {
-                return ExitFailure;
-            }
-
             var testExecutor = CreateTestExecutor(options);
             var testRunner = new TestRunner(options, testExecutor);
             var start = DateTime.Now;
             var assemblyInfoList = GetAssemblyList(options);
+            if (assemblyInfoList.Count == 0)
+            {
+                ConsoleUtil.WriteLine(ConsoleColor.Red, "No assemblies to test");
+                return ExitFailure;
+            }
 
-            Console.WriteLine($"Data Storage: {testExecutor.DataStorage.Name}");
-            Console.WriteLine($"Running {options.Assemblies.Count()} test assemblies in {assemblyInfoList.Count} partitions");
+            var assemblyCount = assemblyInfoList.GroupBy(x => x.AssemblyPath).Count();
+            ConsoleUtil.WriteLine($"Proc dump location: {options.ProcDumpFilePath}");
+            ConsoleUtil.WriteLine($"Running {assemblyCount} test assemblies in {assemblyInfoList.Count} partitions");
 
-            var result = await testRunner.RunAllAsync(assemblyInfoList, cancellationToken).ConfigureAwait(true);
+            var result = options.UseHelix
+                ? await testRunner.RunAllOnHelixAsync(assemblyInfoList, cancellationToken).ConfigureAwait(true)
+                : await testRunner.RunAllAsync(assemblyInfoList, cancellationToken).ConfigureAwait(true);
             var elapsed = DateTime.Now - start;
 
-            Console.WriteLine($"Test execution time: {elapsed}");
+            ConsoleUtil.WriteLine($"Test execution time: {elapsed}");
 
+            LogProcessResultDetails(result.ProcessResults);
             WriteLogFile(options);
             DisplayResults(options.Display, result.TestResults);
-
-            if (CanUseWebStorage() && options.UseCachedResults)
-            {
-                await SendRunStats(options, testExecutor.DataStorage, elapsed, result, assemblyInfoList.Count, cancellationToken).ConfigureAwait(true);
-            }
 
             if (!result.Succeeded)
             {
@@ -122,20 +157,42 @@ namespace RunTests
                 return ExitFailure;
             }
 
-            Console.WriteLine($"All tests passed");
+            ConsoleUtil.WriteLine($"All tests passed");
             return ExitSuccess;
+        }
+
+        private static void LogProcessResultDetails(ImmutableArray<ProcessResult> processResults)
+        {
+            Logger.Log("### Begin logging executed process details");
+            foreach (var processResult in processResults)
+            {
+                var process = processResult.Process;
+                var startInfo = process.StartInfo;
+                Logger.Log($"### Begin {process.Id}");
+                Logger.Log($"### {startInfo.FileName} {startInfo.Arguments}");
+                Logger.Log($"### Exit code {process.ExitCode}");
+                Logger.Log("### Standard Output");
+                foreach (var line in processResult.OutputLines)
+                {
+                    Logger.Log(line);
+                }
+                Logger.Log("### Standard Error");
+                foreach (var line in processResult.ErrorLines)
+                {
+                    Logger.Log(line);
+                }
+                Logger.Log($"### End {process.Id}");
+            }
+
+            Logger.Log("End logging executed process details");
         }
 
         private static void WriteLogFile(Options options)
         {
-            var logFilePath = options.LogFilePath;
-            if (string.IsNullOrEmpty(logFilePath))
-            {
-                return;
-            }
-
+            var logFilePath = Path.Combine(options.LogFilesDirectory, "runtests.log");
             try
             {
+                Directory.CreateDirectory(options.LogFilesDirectory);
                 using (var writer = new StreamWriter(logFilePath, append: false))
                 {
                     Logger.WriteTo(writer);
@@ -143,8 +200,8 @@ namespace RunTests
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error writing log file {logFilePath}");
-                Console.WriteLine(ex);
+                ConsoleUtil.WriteLine($"Error writing log file {logFilePath}");
+                ConsoleUtil.WriteLine(ex.ToString());
             }
 
             Logger.Clear();
@@ -156,55 +213,58 @@ namespace RunTests
         /// </summary>
         private static async Task HandleTimeout(Options options, CancellationToken cancellationToken)
         {
-            var procDumpFilePath = Path.Combine(options.ProcDumpPath, "procdump.exe");
-
-            async Task DumpProcess(Process targetProcess, string dumpFilePath)
+            async Task DumpProcess(Process targetProcess, string procDumpExeFilePath, string dumpFilePath)
             {
-                Console.Write($"Dumping {targetProcess.ProcessName} {targetProcess.Id} to {dumpFilePath} ... ");
+                var name = targetProcess.ProcessName;
+
+                // Our space for saving dump files is limited. Skip dumping for processes that won't contribute
+                // to bug investigations.
+                if (name == "procdump" || name == "conhost")
+                {
+                    return;
+                }
+
+                ConsoleUtil.Write($"Dumping {name} {targetProcess.Id} to {dumpFilePath} ... ");
                 try
                 {
                     var args = $"-accepteula -ma {targetProcess.Id} {dumpFilePath}";
-                    var processTask = ProcessRunner.RunProcessAsync(procDumpFilePath, args, cancellationToken);
-                    var processOutput = await processTask;
+                    var processInfo = ProcessRunner.CreateProcess(procDumpExeFilePath, args, cancellationToken: cancellationToken);
+                    var processOutput = await processInfo.Result;
 
                     // The exit code for procdump doesn't obey standard windows rules.  It will return non-zero
-                    // for succesful cases (possibly returning the count of dumps that were written).  Best 
+                    // for successful cases (possibly returning the count of dumps that were written).  Best 
                     // backup is to test for the dump file being present.
                     if (File.Exists(dumpFilePath))
                     {
-                        Console.WriteLine("succeeded");
+                        ConsoleUtil.WriteLine($"succeeded ({new FileInfo(dumpFilePath).Length} bytes)");
                     }
                     else
                     {
-                        Console.WriteLine($"FAILED with {processOutput.ExitCode}");
-                        Console.WriteLine($"{procDumpFilePath} {args}");
-                        Console.WriteLine(string.Join(Environment.NewLine, processOutput.OutputLines));
+                        ConsoleUtil.WriteLine($"FAILED with {processOutput.ExitCode}");
+                        ConsoleUtil.WriteLine($"{procDumpExeFilePath} {args}");
+                        ConsoleUtil.WriteLine(string.Join(Environment.NewLine, processOutput.OutputLines));
                     }
                 }
                 catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                 {
-                    Console.WriteLine("FAILED");
-                    Console.WriteLine(ex.Message);
+                    ConsoleUtil.WriteLine("FAILED");
+                    ConsoleUtil.WriteLine(ex.Message);
                     Logger.Log("Failed to dump process", ex);
                 }
             }
 
-            Console.WriteLine("Roslyn Error: test timeout exceeded, dumping remaining processes");
-            var procDumpInfo = GetProcDumpInfo(options);
-            if (procDumpInfo != null)
+            if (options.CollectDumps && GetProcDumpInfo(options) is { } procDumpInfo)
             {
-                var dumpDir = procDumpInfo.Value.DumpDirectory;
+                ConsoleUtil.WriteLine("Roslyn Error: test timeout exceeded, dumping remaining processes");
+
                 var counter = 0;
                 foreach (var proc in ProcessUtil.GetProcessTree(Process.GetCurrentProcess()).OrderBy(x => x.ProcessName))
                 {
+                    var dumpDir = procDumpInfo.DumpDirectory;
                     var dumpFilePath = Path.Combine(dumpDir, $"{proc.ProcessName}-{counter}.dmp");
-                    await DumpProcess(proc, dumpFilePath);
+                    await DumpProcess(proc, procDumpInfo.ProcDumpFilePath, dumpFilePath);
                     counter++;
                 }
-            }
-            else
-            {
-                Console.WriteLine("Could not locate procdump");
             }
 
             WriteLogFile(options);
@@ -212,70 +272,65 @@ namespace RunTests
 
         private static ProcDumpInfo? GetProcDumpInfo(Options options)
         {
-            if (!string.IsNullOrEmpty(options.ProcDumpPath))
+            if (!string.IsNullOrEmpty(options.ProcDumpFilePath))
             {
-                var dumpDir = options.LogFilePath != null
-                    ? Path.GetDirectoryName(options.LogFilePath)
-                    : Directory.GetCurrentDirectory();
-                return new ProcDumpInfo(options.ProcDumpPath, dumpDir);
+                return new ProcDumpInfo(options.ProcDumpFilePath, options.LogFilesDirectory);
             }
 
             return null;
-        }
-
-        /// <summary>
-        /// Quick sanity check to look over the set of assemblies to make sure they are valid and something was
-        /// specified.
-        /// </summary>
-        private static bool CheckAssemblyList(Options options)
-        {
-            var anyMissing = false;
-            foreach (var assemblyPath in options.Assemblies)
-            {
-                if (!File.Exists(assemblyPath))
-                {
-                    ConsoleUtil.WriteLine(ConsoleColor.Red, $"The file '{assemblyPath}' does not exist, is an invalid file name, or you do not have sufficient permissions to read the specified file.");
-                    anyMissing = true;
-                }
-            }
-
-            if (anyMissing)
-            {
-                return false;
-            }
-
-            if (options.Assemblies.Count == 0)
-            {
-                Console.WriteLine("No test assemblies specified.");
-                return false;
-            }
-
-            return true;
         }
 
         private static List<AssemblyInfo> GetAssemblyList(Options options)
         {
             var scheduler = new AssemblyScheduler(options);
             var list = new List<AssemblyInfo>();
+            var assemblyPaths = GetAssemblyFilePaths(options);
 
-            foreach (var assemblyPath in options.Assemblies.OrderByDescending(x => new FileInfo(x).Length))
+            foreach (var assemblyPath in assemblyPaths.OrderByDescending(x => new FileInfo(x.FilePath).Length))
             {
-                var name = Path.GetFileName(assemblyPath);
+                list.AddRange(scheduler.Schedule(assemblyPath.FilePath).Select(x => new AssemblyInfo(x, assemblyPath.TargetFramework, options.Platform)));
+            }
 
-                // As a starting point we will just schedule the items we know to be a performance
-                // bottleneck.  Can adjust as we get real data.
-                if (name == "Roslyn.Compilers.CSharp.Emit.UnitTests.dll" ||
-                    name == "Roslyn.Services.Editor.UnitTests.dll" ||
-                    name == "Roslyn.Services.Editor.UnitTests2.dll" ||
-                    name == "Roslyn.VisualStudio.Services.UnitTests.dll" ||
-                    name == "Roslyn.Services.Editor.CSharp.UnitTests.dll" ||
-                    name == "Roslyn.Services.Editor.VisualBasic.UnitTests.dll")
+            return list;
+        }
+
+        private static List<(string FilePath, string TargetFramework)> GetAssemblyFilePaths(Options options)
+        {
+            var list = new List<(string, string)>();
+            var binDirectory = Path.Combine(options.ArtifactsDirectory, "bin");
+            foreach (var project in Directory.EnumerateDirectories(binDirectory, "*", SearchOption.TopDirectoryOnly))
+            {
+                var name = Path.GetFileName(project);
+                var include = false;
+                foreach (var pattern in options.IncludeFilter)
                 {
-                    list.AddRange(scheduler.Schedule(assemblyPath));
+                    if (Regex.IsMatch(name, pattern.Trim('\'', '"')))
+                    {
+                        include = true;
+                    }
                 }
-                else
+
+                if (!include)
                 {
-                    list.Add(scheduler.CreateAssemblyInfo(assemblyPath));
+                    continue;
+                }
+
+                foreach (var pattern in options.ExcludeFilter)
+                {
+                    if (Regex.IsMatch(name, pattern.Trim('\'', '"')))
+                    {
+                        continue;
+                    }
+                }
+
+                var fileName = $"{name}.dll";
+                foreach (var targetFramework in options.TargetFrameworks)
+                {
+                    var filePath = Path.Combine(project, options.Configuration, targetFramework, fileName);
+                    if (File.Exists(filePath))
+                    {
+                        list.Add((filePath, targetFramework));
+                    }
                 }
             }
 
@@ -305,93 +360,21 @@ namespace RunTests
 
                 if (open)
                 {
-                    ProcessRunner.OpenFile(cur.ResultsFilePath);
+                    ProcessRunner.OpenFile(cur.ResultsDisplayFilePath);
                 }
             }
         }
 
-        private static bool CanUseWebStorage()
-        {
-            // The web caching layer is still being worked on.  For now want to limit it to Roslyn developers
-            // and Jenkins runs by default until we work on this a bit more.  Anyone reading this who wants
-            // to try it out should feel free to opt into this.
-            return
-                StringComparer.OrdinalIgnoreCase.Equals("REDMOND", Environment.UserDomainName) ||
-                Constants.IsJenkinsRun;
-        }
-
-        private static ITestExecutor CreateTestExecutor(Options options)
+        private static ProcessTestExecutor CreateTestExecutor(Options options)
         {
             var testExecutionOptions = new TestExecutionOptions(
-                xunitPath: options.XunitPath,
-                procDumpInfo: GetProcDumpInfo(options),
-                logFilePath: options.LogFilePath,
-                trait: options.Trait,
-                noTrait: options.NoTrait,
-                useHtml: options.UseHtml,
-                test64: options.Test64,
-                testVsi: options.TestVsi);
-            var processTestExecutor = new ProcessTestExecutor(testExecutionOptions);
-            if (!options.UseCachedResults)
-            {
-                return processTestExecutor;
-            }
-
-            // The web caching layer is still being worked on.  For now want to limit it to Roslyn developers
-            // and Jenkins runs by default until we work on this a bit more.  Anyone reading this who wants
-            // to try it out should feel free to opt into this.
-            IDataStorage dataStorage = new LocalDataStorage();
-            if (CanUseWebStorage())
-            {
-                dataStorage = new WebDataStorage();
-            }
-
-            return new CachingTestExecutor(testExecutionOptions, processTestExecutor, dataStorage);
-        }
-
-        /// <summary>
-        /// Order the assembly list so that the largest assemblies come first.  This
-        /// is not ideal as the largest assembly does not necessarily take the most time.
-        /// </summary>
-        /// <param name="list"></param>
-        private static IOrderedEnumerable<string> OrderAssemblyList(IEnumerable<string> list)
-        {
-            return list.OrderByDescending((assemblyName) => new FileInfo(assemblyName).Length);
-        }
-
-        private static async Task SendRunStats(Options options, IDataStorage dataStorage, TimeSpan elapsed, RunAllResult result, int partitionCount, CancellationToken cancellationToken)
-        {
-            var testRunData = new TestRunData()
-            {
-                Cache = dataStorage.Name,
-                ElapsedSeconds = (int)elapsed.TotalSeconds,
-                JenkinsUrl = Constants.JenkinsUrl,
-                IsJenkins = Constants.IsJenkinsRun,
-                Is32Bit = !options.Test64,
-                AssemblyCount = options.Assemblies.Count,
-                ChunkCount = partitionCount,
-                CacheCount = result.CacheCount,
-                Succeeded = result.Succeeded,
-                HasErrors = Logger.HasErrors
-            };
-
-            var request = new RestRequest("api/testData/run", Method.POST);
-            request.RequestFormat = DataFormat.Json;
-            request.AddParameter("text/json", JsonConvert.SerializeObject(testRunData), ParameterType.RequestBody);
-
-            try
-            {
-                var client = new RestClient(Constants.DashboardUriString);
-                var response = await client.ExecuteTaskAsync(request);
-                if (response.StatusCode != System.Net.HttpStatusCode.NoContent)
-                {
-                    Logger.Log($"Unable to send results: {response.ErrorMessage}");
-                }
-            }
-            catch
-            {
-                Logger.Log("Unable to send results");
-            }
+                dotnetFilePath: options.DotnetFilePath,
+                procDumpInfo: options.CollectDumps ? GetProcDumpInfo(options) : null,
+                testResultsDirectory: options.TestResultsDirectory,
+                testFilter: options.TestFilter,
+                includeHtml: options.IncludeHtml,
+                retry: options.Retry);
+            return new ProcessTestExecutor(testExecutionOptions);
         }
 
         /// <summary>
@@ -403,7 +386,7 @@ namespace RunTests
             var dumpFiles = Directory.EnumerateFiles(directory, "*.dmp", SearchOption.AllDirectories).ToArray();
             long currentTotalSize = 0;
 
-            foreach(var dumpFile in dumpFiles)
+            foreach (var dumpFile in dumpFiles)
             {
                 long fileSizeInMegabytes = (new FileInfo(dumpFile).Length / 1024) / 1024;
                 currentTotalSize += fileSizeInMegabytes;

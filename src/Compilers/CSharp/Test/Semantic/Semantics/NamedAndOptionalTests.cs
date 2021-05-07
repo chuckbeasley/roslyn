@@ -1,4 +1,8 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
+
+#nullable disable
 
 using System;
 using System.Linq;
@@ -31,7 +35,7 @@ class Program
     }
 }
 ";
-            var comp = CreateStandardCompilation(source);
+            var comp = CreateCompilation(source);
             comp.VerifyDiagnostics(
                 // (6,33): error CS1736: Default parameter value for 'da' must be a compile-time constant
                 //     static void M(DateTime da = new DateTime(2012, 6, 22),
@@ -121,7 +125,7 @@ abstract class Golf : Echo
 
 
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics();
+            CreateCompilation(source).VerifyDiagnostics();
         }
 
         [Fact]
@@ -168,7 +172,7 @@ class C : Middle
         c.Goo(optArg1: 3333, 11111);
     }
 }";
-            CreateStandardCompilation(source, parseOptions: TestOptions.Regular7_1).VerifyDiagnostics(
+            CreateCompilation(source, parseOptions: TestOptions.Regular7_1).VerifyDiagnostics(
                 // (37,15): error CS1739: The best overload for 'Goo' does not have a parameter named 'optParam3'
                 //         c.Goo(optParam3: 333, reqParam1: 111 , optParam2: 222, optParam1: 1111); 
                 Diagnostic(ErrorCode.ERR_BadNamedArgument, "optParam3").WithArguments("Goo", "optParam3").WithLocation(37, 15),
@@ -190,7 +194,7 @@ class C
     //error CS1736 
     public void M(string s = new string('c',5)) {}
 }";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (5,30): error CS1736: Default parameter value for 's' must be a compile-time constant
                 //     public void M(string s = new string('c',5)) {}
                 Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "new string('c',5)").WithArguments("s").WithLocation(5, 30));
@@ -220,7 +224,7 @@ class C
         new C(0, cz : 456);
     }
 }";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (10,9): error CS7036: There is no argument given that corresponds to the required formal parameter 'fg' of 'C.F'
                 //         f(0, fz : 456);
                 Diagnostic(ErrorCode.ERR_NoCorrespondingArgument, "f").WithArguments("fg", "C.F").WithLocation(10, 9),
@@ -250,7 +254,7 @@ class C
 }";
             // and so Roslyn does too. It seems likely that someone has taken a dependency
             // on the bad pattern.
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (4,15): error CS0542: 'C': member names cannot be the same as their enclosing type
                 //   static void C(int q = 10, params int[] x) {}
                 Diagnostic(ErrorCode.ERR_MemberNameSameAsType, "C").WithArguments("C").WithLocation(4, 15));
@@ -269,7 +273,7 @@ class C
     C(1, 2, 3, x:4);
   }
 }";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (4,15): error CS0542: 'C': member names cannot be the same as their enclosing type
                 //   static void C(int q = 10, params int[] x) {}
                 Diagnostic(ErrorCode.ERR_MemberNameSameAsType, "C").WithArguments("C").WithLocation(4, 15),
@@ -734,7 +738,7 @@ partial class C
     }
 }";
 
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
 // (13,23): error CS1739: The best overload for 'PartialMethod' does not have a parameter named 'y'
 //         PartialMethod(y:123);
 Diagnostic(ErrorCode.ERR_BadNamedArgument, "y").WithArguments("PartialMethod", "y")
@@ -801,7 +805,7 @@ namespace NS
     }
 }
 ";
-            var comp = CreateStandardCompilation(text);
+            var comp = CreateCompilation(text);
             var nodeAndModel = GetBindingNodeAndModel<IdentifierNameSyntax>(comp);
 
             var typeInfo = nodeAndModel.Item2.GetTypeInfo(nodeAndModel.Item1);
@@ -825,7 +829,7 @@ namespace NS
     void M1(object value = F()) { }
     object M2(object value = M2()) { return null; }
 }";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (4,28): error CS1736: Default parameter value for 'value' must be a compile-time constant
                 Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "F()").WithArguments("value").WithLocation(4, 28),
                 // (5,30): error CS1736: Default parameter value for 'value' must be a compile-time constant
@@ -842,7 +846,7 @@ namespace NS
     static void M1(object value = F()) { }
     static object M2(object value = M2()) { return null; }
 }";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (4,35): error CS1736: Default parameter value for 'value' must be a compile-time constant
                 Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "F()").WithArguments("value").WithLocation(4, 35),
                 // (5,37): error CS1736: Default parameter value for 'value' must be a compile-time constant
@@ -865,7 +869,7 @@ public struct Vector3
     public float Y;
     public float Z;
 }";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (3,39): error CS1736: Default parameter value for 'vector' must be a compile-time constant
                 Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "new Vector3() { X = 1f, Y = 1f, Z = 1f}").WithArguments("vector").WithLocation(3, 39));
         }
@@ -880,7 +884,7 @@ public struct Vector3
 {
     static void Goo<T>(T t = default(T)) {}
 }";
-            CreateStandardCompilation(source).VerifyDiagnostics();
+            CreateCompilation(source).VerifyDiagnostics();
         }
 
 
@@ -956,7 +960,7 @@ class Test{
     }
 }
 ";
-            CreateStandardCompilation(source, new[] { SystemRef }).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (9,21): error CS1745: Cannot specify default parameter value in conjunction with DefaultParameterAttribute or OptionalAttribute
                 //     public int Bar([DefaultParameterValue(1)]int i = 2) {
                 Diagnostic(ErrorCode.ERR_DefaultValueUsedWithAttributes, "DefaultParameterValue").WithLocation(9, 21),
@@ -1004,7 +1008,7 @@ public class Parent
      }
 }
 ";
-            var comp = CreateStandardCompilation(source, new[] { SystemRef });
+            var comp = CreateCompilation(source);
             comp.VerifyDiagnostics(
  // (8,10): error CS7036: There is no argument given that corresponds to the required formal parameter 'x' of 'Parent.Goo(ref int)'
  //          Goo();
@@ -1023,7 +1027,7 @@ public interface IOptionalRef
     MyEnum MethodRef([In, Out, Optional, DefaultParameterValue(MyEnum.three)] ref MyEnum v);
 }
 ";
-            CompileAndVerify(source, new[] { SystemRef }).VerifyDiagnostics();
+            CompileAndVerify(source).VerifyDiagnostics();
         }
 
         [Fact]
@@ -1115,7 +1119,7 @@ public static class ErrorCases
 }
 ";
             // NOTE: anywhere dev10 reported CS1909, roslyn reports CS1910.
-            CreateStandardCompilation(source, new[] { SystemRef }).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (27,20): error CS1908: The type of the argument to the DefaultParameterValue attribute must match the parameter type
                 //         [Optional][DefaultParameterValue(0)]         bool b1,
                 Diagnostic(ErrorCode.ERR_DefaultValueTypeMustMatch, "DefaultParameterValue"),
@@ -1208,7 +1212,7 @@ public static class ErrorCases
         }
 
         [WorkItem(544440, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/544440")]
-        [ClrOnlyFact]
+        [ConditionalFact(typeof(DesktopOnly))]
         public void TestBug12768()
         {
             string sourceDefinitions = @"
@@ -1337,13 +1341,54 @@ System.Runtime.InteropServices.UnknownWrapper
 17
 18";
             // definitions in source:
-            var verifier = CompileAndVerify(new[] { sourceDefinitions, sourceCalls }, new[] { SystemRef }, expectedOutput: expected);
+            var verifier = CompileAndVerify(new[] { sourceDefinitions, sourceCalls }, expectedOutput: expected);
 
             // definitions in metadata:
             using (var assembly = AssemblyMetadata.CreateFromImage(verifier.EmittedAssemblyData))
             {
-                CompileAndVerify(new[] { sourceCalls }, new[] { SystemRef, assembly.GetReference() }, expectedOutput: expected);
+                CompileAndVerify(new[] { sourceCalls }, new[] { assembly.GetReference() }, expectedOutput: expected);
             }
+        }
+
+        [ConditionalFact(typeof(DesktopOnly))]
+        public void IUnknownConstant_MissingType()
+        {
+            var source = @"
+using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
+
+class C
+{
+    static void M0([Optional, MarshalAs(UnmanagedType.Interface)] object param) { }
+    static void M1([Optional, IUnknownConstant] object param) { }
+    static void M2([Optional, IDispatchConstant] object param) { }
+    static void M3([Optional] object param) { }
+
+    static void M()
+    {
+        M0();
+        M1();
+        M2();
+        M3();
+    }
+}
+";
+            CompileAndVerify(source).VerifyDiagnostics();
+
+            var comp = CreateCompilation(source);
+            comp.MakeMemberMissing(WellKnownMember.System_Runtime_InteropServices_UnknownWrapper__ctor);
+            comp.MakeMemberMissing(WellKnownMember.System_Runtime_InteropServices_DispatchWrapper__ctor);
+            comp.MakeMemberMissing(WellKnownMember.System_Type__Missing);
+            comp.VerifyDiagnostics(
+                // (15,9): error CS0656: Missing compiler required member 'System.Runtime.InteropServices.UnknownWrapper..ctor'
+                //         M1();
+                Diagnostic(ErrorCode.ERR_MissingPredefinedMember, "M1()").WithArguments("System.Runtime.InteropServices.UnknownWrapper", ".ctor").WithLocation(15, 9),
+                // (16,9): error CS0656: Missing compiler required member 'System.Runtime.InteropServices.DispatchWrapper..ctor'
+                //         M2();
+                Diagnostic(ErrorCode.ERR_MissingPredefinedMember, "M2()").WithArguments("System.Runtime.InteropServices.DispatchWrapper", ".ctor").WithLocation(16, 9),
+                // (17,9): error CS0656: Missing compiler required member 'System.Type.Missing'
+                //         M3();
+                Diagnostic(ErrorCode.ERR_MissingPredefinedMember, "M3()").WithArguments("System.Type", "Missing").WithLocation(17, 9));
         }
 
         [WorkItem(545329, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/545329")]
@@ -1378,7 +1423,7 @@ class C
     }
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (25,9): error CS7036: There is no argument given that corresponds to the required formal parameter 'o' of 'D.M(ref object)'
                 //         d.M(); //CS1501
                 Diagnostic(ErrorCode.ERR_NoCorrespondingArgument, "M").WithArguments("o", "D.M(ref object)").WithLocation(25, 11));
@@ -1627,10 +1672,10 @@ public class D
 }
 ";
 
-            var libComp = CreateStandardCompilation(library, options: TestOptions.ReleaseDll, assemblyName: "Library");
+            var libComp = CreateCompilation(library, options: TestOptions.ReleaseDll, assemblyName: "Library");
             libComp.VerifyDiagnostics();
 
-            var exeComp = CreateStandardCompilation(main, new[] { new CSharpCompilationReference(libComp) }, options: TestOptions.ReleaseExe, assemblyName: "Main");
+            var exeComp = CreateCompilation(main, new[] { new CSharpCompilationReference(libComp) }, options: TestOptions.ReleaseExe, assemblyName: "Main");
 
             var verifier = CompileAndVerify(exeComp, expectedOutput: @"DatesMatch
 12345678901234567890
@@ -1698,7 +1743,7 @@ class P
 ";
             // Note that the native compiler gives a slightly less informative error message here.
 
-            var comp = CreateStandardCompilation(source);
+            var comp = CreateCompilation(source);
             comp.VerifyDiagnostics(
 // (11,26): error CS7036: There is no argument given that corresponds to the required formal parameter 'o' of 'I.M(out object)'
 //     static void Q(I i) { i.M(); }
@@ -2055,7 +2100,7 @@ public class C
                 Assert.Equal(isFromSource ? 2 : 0, parameters[7].GetAttributes().Length);
             };
 
-            CompileAndVerify(source, new[] { SystemRef }, sourceSymbolValidator: validator(true), symbolValidator: validator(false));
+            CompileAndVerify(source, sourceSymbolValidator: validator(true), symbolValidator: validator(false));
         }
 
         [Fact]
@@ -2106,7 +2151,7 @@ public struct S
             };
 
             // TODO: RefEmit doesn't emit the default value of M1's parameter.
-            CompileAndVerify(source, new[] { SystemRef }, sourceSymbolValidator: validator(true), symbolValidator: validator(false));
+            CompileAndVerify(source, sourceSymbolValidator: validator(true), symbolValidator: validator(false));
         }
 
         [Fact]
@@ -2188,7 +2233,7 @@ public class C
                 Assert.Equal(isFromSource ? 2 : 0, parameters[7].GetAttributes().Length);
             };
 
-            CompileAndVerify(source, new[] { SystemRef }, sourceSymbolValidator: validator(true), symbolValidator: validator(false));
+            CompileAndVerify(source, sourceSymbolValidator: validator(true), symbolValidator: validator(false));
         }
 
         [Fact]
@@ -2271,7 +2316,7 @@ public class C
                 Assert.Equal(isFromSource ? 2 : 0, parameters[7].GetAttributes().Length); // Optional+DecimalConstantAttribute / DecimalConstantAttribute
             };
 
-            CompileAndVerify(source, new[] { SystemRef }, sourceSymbolValidator: validator(true), symbolValidator: validator(false));
+            CompileAndVerify(source, sourceSymbolValidator: validator(true), symbolValidator: validator(false));
         }
 
         [Fact]
@@ -2348,7 +2393,99 @@ public class C
             };
 
             // TODO: Guess - RefEmit doesn't like DateTime constants.
-            CompileAndVerify(source, new[] { SystemRef }, sourceSymbolValidator: validator(true), symbolValidator: validator(false));
+            CompileAndVerify(source, sourceSymbolValidator: validator(true), symbolValidator: validator(false));
+        }
+
+        [Fact]
+        public void InvalidConversionForDefaultArgument_InIL()
+        {
+            var il = @"
+.class public auto ansi beforefieldinit P
+       extends [mscorlib]System.Object
+{
+  .method public hidebysig specialname rtspecialname 
+          instance void  .ctor() cil managed
+  {
+    // Code size       8 (0x8)
+    .maxstack  8
+    IL_0000:  ldarg.0
+    IL_0001:  call       instance void [mscorlib]System.Object::.ctor()
+    IL_0006:  nop
+    IL_0007:  ret
+  } // end of method P::.ctor
+
+  .method public hidebysig instance int32  M1([opt] int32 s) cil managed
+  {
+    .param [1] = ""abc""
+    // Code size 2 (0x2)
+    .maxstack 8
+
+    IL_0000: ldarg.1
+    IL_0001: ret
+  } // end of method P::M1
+} // end of class P
+";
+
+            var csharp = @"
+class C
+{
+    public static void Main()
+    {
+         P p = new P();
+         System.Console.Write(p.M1());
+    }
+}
+";
+            var comp = CreateCompilationWithIL(csharp, il, options: TestOptions.DebugExe);
+            comp.VerifyDiagnostics(
+                // (7,31): error CS0029: Cannot implicitly convert type 'string' to 'int'
+                //          System.Console.Write(p.M1());
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "p.M1()").WithArguments("string", "int").WithLocation(7, 31));
+        }
+
+        [Fact]
+        public void DefaultArgument_LoopInUsage()
+        {
+            var csharp = @"
+class C
+{
+    static object F(object param = F()) => param; // 1
+}
+";
+            var comp = CreateCompilation(csharp);
+            comp.VerifyDiagnostics(
+                // (4,36): error CS1736: Default parameter value for 'param' must be a compile-time constant
+                //     static object F(object param = F()) => param; // 1
+                Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "F()").WithArguments("param").WithLocation(4, 36));
+
+            var method = comp.GetMember<MethodSymbol>("C.F");
+            var param = method.Parameters.Single();
+            Assert.Equal(ConstantValue.Bad, param.ExplicitDefaultConstantValue);
+        }
+
+        [Fact]
+        public void DefaultValue_Boxing()
+        {
+            var csharp = @"
+class C
+{
+    void M1(object obj = 1) // 1
+    {
+    }
+
+    C(object obj = System.DayOfWeek.Monday) // 2
+    {
+    }
+}
+";
+            var comp = CreateCompilation(csharp);
+            comp.VerifyDiagnostics(
+                // (4,20): error CS1763: 'obj' is of type 'object'. A default parameter value of a reference type other than string can only be initialized with null
+                //     void M1(object obj = 1) // 1
+                Diagnostic(ErrorCode.ERR_NotNullRefDefaultParameter, "obj").WithArguments("obj", "object").WithLocation(4, 20),
+                // (8,14): error CS1763: 'obj' is of type 'object'. A default parameter value of a reference type other than string can only be initialized with null
+                //     C(object obj = System.DayOfWeek.Monday) // 2
+                Diagnostic(ErrorCode.ERR_NotNullRefDefaultParameter, "obj").WithArguments("obj", "object").WithLocation(8, 14));
         }
     }
 }

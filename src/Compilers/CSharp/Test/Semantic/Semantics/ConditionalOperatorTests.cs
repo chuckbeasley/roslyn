@@ -1,4 +1,6 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
 
 using System.Linq;
 using Microsoft.CodeAnalysis.CSharp.Symbols;
@@ -66,13 +68,16 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void TestNoConversion()
         {
-            TestConditional("true ? T : U", null,
+            TestConditional("true ? T : U", null, parseOptions: TestOptions.Regular8,
                 Diagnostic(ErrorCode.ERR_BadSKunknown, "T").WithArguments("T", "type"),
-                Diagnostic(ErrorCode.ERR_BadSKunknown, "U").WithArguments("U", "type"),
-                Diagnostic(ErrorCode.ERR_InvalidQM, "true ? T : U").WithArguments("T", "U"));
-            TestConditional("false ? T : 1", null,
+                Diagnostic(ErrorCode.ERR_BadSKunknown, "U").WithArguments("U", "type"));
+            TestConditional("true ? T : U", null, parseOptions: TestOptions.Regular8.WithLanguageVersion(MessageID.IDS_FeatureTargetTypedConditional.RequiredVersion()),
                 Diagnostic(ErrorCode.ERR_BadSKunknown, "T").WithArguments("T", "type"),
-                Diagnostic(ErrorCode.ERR_InvalidQM, "false ? T : 1").WithArguments("T", "int"));
+                Diagnostic(ErrorCode.ERR_BadSKunknown, "U").WithArguments("U", "type"));
+            TestConditional("false ? T : 1", null, parseOptions: TestOptions.Regular8,
+                Diagnostic(ErrorCode.ERR_BadSKunknown, "T").WithArguments("T", "type"));
+            TestConditional("false ? T : 1", null, parseOptions: TestOptions.Regular8.WithLanguageVersion(MessageID.IDS_FeatureTargetTypedConditional.RequiredVersion()),
+                Diagnostic(ErrorCode.ERR_BadSKunknown, "T").WithArguments("T", "type"));
             TestConditional("true ? GetUserGeneric<char>() : GetUserNonGeneric()", null,
                 Diagnostic(ErrorCode.ERR_InvalidQM, "true ? GetUserGeneric<char>() : GetUserNonGeneric()").WithArguments("D<char>", "C"));
         }
@@ -96,8 +101,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         {
             TestConditional("true ? GetInt() : null", null,
                 Diagnostic(ErrorCode.ERR_InvalidQM, "true ? GetInt() : null").WithArguments("int", "<null>"));
-            TestConditional("false ? GetString : (System.Func<int>)null", null,
+            TestConditional("false ? GetString : (System.Func<int>)null", null, TestOptions.WithoutImprovedOverloadCandidates,
                 Diagnostic(ErrorCode.ERR_BadRetType, "GetString").WithArguments("C.GetString()", "string"));
+            TestConditional("false ? GetString : (System.Func<int>)null", null,
+                // (6,13): error CS0173: Type of conditional expression cannot be determined because there is no implicit conversion between 'method group' and 'Func<int>'
+                //         _ = false ? GetString : (System.Func<int>)null;
+                Diagnostic(ErrorCode.ERR_InvalidQM, "false ? GetString : (System.Func<int>)null").WithArguments("method group", "System.Func<int>"));
             TestConditional("true ? (System.Func<int, short>)null : x => x", null,
                 Diagnostic(ErrorCode.ERR_InvalidQM, "true ? (System.Func<int, short>)null : x => x").WithArguments("System.Func<int, short>", "lambda expression"));
         }
@@ -139,7 +148,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             TestConditional("true ?  : GetInt()", null,
                 Diagnostic(ErrorCode.ERR_InvalidExprTerm, ":").WithArguments(":"));
             TestConditional("true ? GetInt() :  ", null,
-                Diagnostic(ErrorCode.ERR_InvalidExprTerm, ")").WithArguments(")"));
+                Diagnostic(ErrorCode.ERR_InvalidExprTerm, ";").WithArguments(";"));
         }
 
         [Fact]
@@ -182,9 +191,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "Goo").WithArguments("Goo"));
 
             // CONSIDER: dev10 reports ERR_ConstOutOfRange
-            TestConditional("1 ? null : null", null,
-                Diagnostic(ErrorCode.ERR_NoImplicitConv, "1").WithArguments("int", "bool"),
-                Diagnostic(ErrorCode.ERR_InvalidQM, "1 ? null : null").WithArguments("<null>", "<null>"));
+            TestConditional("1 ? null : null", null, parseOptions: TestOptions.Regular8,
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "1").WithArguments("int", "bool")
+                );
+            TestConditional("1 ? null : null", null, parseOptions: TestOptions.Regular.WithLanguageVersion(MessageID.IDS_FeatureTargetTypedConditional.RequiredVersion()),
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "1").WithArguments("int", "bool")
+                );
         }
 
         [WorkItem(545408, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/545408")]
@@ -669,8 +681,18 @@ class Program
 }
 ";
 
-            var verifier = CompileAndVerify(new string[] { source }, additionalRefs: new[] { SystemCoreRef }, expectedOutput: "1");
+            var verifier = CompileAndVerify(
+                new string[] { source },
+                expectedOutput: "1",
+                symbolValidator: validator,
+                options: TestOptions.ReleaseExe.WithMetadataImportOptions(MetadataImportOptions.All));
             verifier.VerifyIL("Program.Main", expectedIL);
+
+            void validator(ModuleSymbol module)
+            {
+                var type = module.ContainingAssembly.GetTypeByMetadataName("Program");
+                Assert.Null(type.GetMember(".cctor"));
+            }
         }
 
         [Fact]
@@ -731,7 +753,7 @@ class Program
 }
 ";
 
-            var verifier = CompileAndVerify(new string[] { source }, additionalRefs: new[] { SystemCoreRef }, expectedOutput: "1");
+            var verifier = CompileAndVerify(new string[] { source }, expectedOutput: "1");
             verifier.VerifyIL("Program.Main", expectedIL);
         }
 
@@ -796,7 +818,7 @@ class Program
 }
 ";
 
-            var verifier = CompileAndVerify(new string[] { source }, additionalRefs: new[] { SystemCoreRef }, expectedOutput: "1");
+            var verifier = CompileAndVerify(new string[] { source }, expectedOutput: "1");
             verifier.VerifyIL("Program.Main", expectedIL);
         }
 
@@ -873,7 +895,7 @@ class Program
 }
 ";
 
-            var verifier = CompileAndVerify(new string[] { source }, additionalRefs: new[] { SystemCoreRef }, expectedOutput: "1");
+            var verifier = CompileAndVerify(new string[] { source }, expectedOutput: "1");
             verifier.VerifyIL("Program.Main", expectedIL);
         }
 
@@ -951,7 +973,7 @@ class Program
 }
 ";
 
-            var verifier = CompileAndVerify(new string[] { source }, additionalRefs: new[] { SystemCoreRef }, expectedOutput: "1");
+            var verifier = CompileAndVerify(new string[] { source }, expectedOutput: "1");
             verifier.VerifyIL("Program.Main", expectedIL);
         }
 
@@ -1123,7 +1145,7 @@ namespace TernaryAndVarianceConversion
     }
 }
 ";
-            var compilation = CreateCompilationWithMscorlibAndSystemCore(source, options: TestOptions.ReleaseExe);
+            var compilation = CreateCompilationWithMscorlib40AndSystemCore(source, options: TestOptions.ReleaseExe);
             CompileAndVerify(compilation, expectedOutput: @"Testing with ternary test flag == True
 1
 TernaryAndVarianceConversion.Mammal
@@ -1181,19 +1203,37 @@ System.Collections.Generic.List`1[System.Int32]
         return b ? c : d;
     }
 }";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (3,34): error CS0246: The type or namespace name 'D' could not be found (are you missing a using directive or an assembly reference?)
                 Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "D").WithArguments("D"));
         }
 
-        private static void TestConditional(string conditionalExpression, string expectedType, params DiagnosticDescription[] expectedDiagnostics)
+        private static void TestConditional(string conditionalExpression, string? expectedType, params DiagnosticDescription[] expectedDiagnostics)
         {
-            string sourceTemplate = @"
+            TestConditional(conditionalExpression, expectedType, null, expectedDiagnostics);
+        }
+
+        private static void TestConditional(string conditionalExpression, string? expectedType, CSharpParseOptions? parseOptions, params DiagnosticDescription[] expectedDiagnostics)
+        {
+            if (parseOptions is null)
+            {
+                TestConditionalCore(conditionalExpression, expectedType, TestOptions.Regular8, expectedDiagnostics);
+                TestConditionalCore(conditionalExpression, expectedType, TestOptions.Regular8.WithLanguageVersion(MessageID.IDS_FeatureTargetTypedConditional.RequiredVersion()), expectedDiagnostics);
+            }
+            else
+            {
+                TestConditionalCore(conditionalExpression, expectedType, parseOptions, expectedDiagnostics);
+            }
+        }
+
+        private static void TestConditionalCore(string conditionalExpression, string? expectedType, CSharpParseOptions parseOptions, params DiagnosticDescription[] expectedDiagnostics)
+        {
+            string source = $@"
 class C
 {{
     void Test<T, U>()
     {{
-        System.Console.WriteLine({0});
+        _ = {conditionalExpression};
     }}
 
     int GetInt() {{ return 1; }}
@@ -1214,18 +1254,17 @@ class D<T> {{ }}
 public enum color {{ Red, Blue, Green }};
 interface I<in T, out U> {{ }}";
 
-            var source = string.Format(sourceTemplate, conditionalExpression);
-            var tree = Parse(source);
+            var tree = Parse(source, options: parseOptions);
 
-            var comp = CreateStandardCompilation(tree);
+            var comp = CreateCompilation(tree);
             comp.VerifyDiagnostics(expectedDiagnostics);
 
             var compUnit = tree.GetCompilationUnitRoot();
             var classC = (TypeDeclarationSyntax)compUnit.Members.First();
             var methodTest = (MethodDeclarationSyntax)classC.Members.First();
-            var stmt = (ExpressionStatementSyntax)methodTest.Body.Statements.Single();
-            var invocationExpr = (InvocationExpressionSyntax)stmt.Expression;
-            var conditionalExpr = (ConditionalExpressionSyntax)invocationExpr.ArgumentList.Arguments.Single().Expression;
+            var stmt = (ExpressionStatementSyntax)methodTest.Body!.Statements.First();
+            var assignment = (AssignmentExpressionSyntax)stmt.Expression;
+            var conditionalExpr = (ConditionalExpressionSyntax)assignment.Right;
 
             var model = comp.GetSemanticModel(tree);
 
@@ -1235,7 +1274,7 @@ interface I<in T, out U> {{ }}";
 
                 if (!expectedDiagnostics.Any())
                 {
-                    Assert.Equal(SpecialType.System_Boolean, model.GetTypeInfo(conditionalExpr.Condition).Type.SpecialType);
+                    Assert.Equal(SpecialType.System_Boolean, model.GetTypeInfo(conditionalExpr.Condition).Type!.SpecialType);
                     Assert.Equal(expectedType, model.GetTypeInfo(conditionalExpr.WhenTrue).ConvertedType.ToTestDisplayString()); //in parent to catch conversion
                     Assert.Equal(expectedType, model.GetTypeInfo(conditionalExpr.WhenFalse).ConvertedType.ToTestDisplayString()); //in parent to catch conversion
                 }
@@ -1269,7 +1308,7 @@ class TestClass
 }
 ";
 
-            var compilation = CreateStandardCompilation(source, options: TestOptions.DebugExe);
+            var compilation = CreateCompilation(source, options: TestOptions.DebugExe);
 
             CompileAndVerify(compilation, expectedOutput:
 @"----
@@ -1280,7 +1319,7 @@ System.Action
 
             var tree = compilation.SyntaxTrees.Single();
             var memberBinding = tree.GetRoot().DescendantNodes().OfType<MemberBindingExpressionSyntax>().Single();
-            var access = (ConditionalAccessExpressionSyntax)memberBinding.Parent;
+            var access = (ConditionalAccessExpressionSyntax)memberBinding.Parent!;
 
             Assert.Equal(".test", memberBinding.ToString());
             Assert.Equal("receiver?.test", access.ToString());
@@ -1324,7 +1363,7 @@ class TestClass
 }
 ";
 
-            var compilation = CreateStandardCompilation(source, options: TestOptions.DebugExe);
+            var compilation = CreateCompilation(source, options: TestOptions.DebugExe);
 
             CompileAndVerify(compilation, expectedOutput:
 @"----
@@ -1334,8 +1373,8 @@ Target
 
             var tree = compilation.SyntaxTrees.Single();
             var memberBinding = tree.GetRoot().DescendantNodes().OfType<MemberBindingExpressionSyntax>().Single();
-            var invocation = (InvocationExpressionSyntax)memberBinding.Parent;
-            var access = (ConditionalAccessExpressionSyntax)invocation.Parent;
+            var invocation = (InvocationExpressionSyntax)memberBinding.Parent!;
+            var access = (ConditionalAccessExpressionSyntax)invocation.Parent!;
 
             Assert.Equal(".test", memberBinding.ToString());
             Assert.Equal(".test()", invocation.ToString());
@@ -1371,7 +1410,7 @@ class TestClass
 }
 ";
 
-            var compilation = CreateStandardCompilation(source, options: TestOptions.DebugDll);
+            var compilation = CreateCompilation(source, options: TestOptions.DebugDll);
 
             compilation.VerifyDiagnostics(
     // (10,9): error CS0131: The left-hand side of an assignment must be a variable, property or indexer
@@ -1381,7 +1420,7 @@ class TestClass
 
             var tree = compilation.SyntaxTrees.Single();
             var memberBinding = tree.GetRoot().DescendantNodes().OfType<MemberBindingExpressionSyntax>().Single();
-            var access = (ConditionalAccessExpressionSyntax)memberBinding.Parent;
+            var access = (ConditionalAccessExpressionSyntax)memberBinding.Parent!;
 
             Assert.Equal(".test", memberBinding.ToString());
             Assert.Equal("receiver?.test", access.ToString());
@@ -1433,7 +1472,7 @@ class TestClass
 }
 ";
 
-            var compilation = CreateStandardCompilation(source, options: TestOptions.DebugExe,
+            var compilation = CreateCompilation(source, options: TestOptions.DebugExe,
                                                             parseOptions: CSharpParseOptions.Default.WithPreprocessorSymbols("DEBUG"));
 
             CompileAndVerify(compilation, expectedOutput:
@@ -1453,9 +1492,28 @@ Self
 Test
 ");
 
-            compilation = CreateStandardCompilation(source, options: TestOptions.ReleaseExe);
+            compilation = CreateCompilation(source, options: TestOptions.ReleaseExe);
 
             CompileAndVerify(compilation, expectedOutput: "---");
+        }
+
+        [Fact, WorkItem(1198816, "https://devdiv.visualstudio.com/DevDiv/_workitems/edit/1198816/")]
+        public void DefiniteAssignment_UnconvertedConditionalOperator()
+        {
+            var source =
+@"class Program
+{
+    static void Main()
+    {
+        _ = new(bad) ? null : new object();
+    }
+}";
+            var comp = CreateCompilation(source);
+            comp.VerifyDiagnostics(
+                // (5,17): error CS0103: The name 'bad' does not exist in the current context
+                //         _ = new(bad) ? null : new object();
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "bad").WithArguments("bad").WithLocation(5, 17)
+            );
         }
     }
 }

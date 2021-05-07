@@ -1,6 +1,9 @@
-﻿' Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿' Licensed to the .NET Foundation under one or more agreements.
+' The .NET Foundation licenses this file to you under the MIT license.
+' See the LICENSE file in the project root for more information.
 
 Imports System.Globalization
+Imports System.Threading
 Imports Microsoft.CodeAnalysis.VisualBasic
 Imports Microsoft.CodeAnalysis.VisualBasic.Syntax
 
@@ -17,6 +20,12 @@ Namespace Microsoft.CodeAnalysis.VisualBasic
 
         Private Sub New()
         End Sub
+
+        Private ReadOnly Property IObjectWritable_ShouldReuseInSerialization As Boolean Implements IObjectWritable.ShouldReuseInSerialization
+            Get
+                Return True
+            End Get
+        End Property
 
         Private Sub WriteTo(writer As ObjectWriter) Implements IObjectWritable.WriteTo
             ' don't write anything since we always return the shared 'Instance' when read.
@@ -124,6 +133,8 @@ Namespace Microsoft.CodeAnalysis.VisualBasic
                                                                    diagnosticInfo.Category,
                                                                    options.GeneralDiagnosticOption,
                                                                    options.SpecificDiagnosticOptions,
+                                                                   options.SyntaxTreeOptionsProvider,
+                                                                   CancellationToken.None, ' We don't have a tree so there's no need to pass cancellation to the SyntaxTreeOptionsProvider
                                                                    hasSourceSuppression)
         End Function
 
@@ -131,6 +142,12 @@ Namespace Microsoft.CodeAnalysis.VisualBasic
         Public Overrides ReadOnly Property ERR_FailedToCreateTempFile As Integer
             Get
                 Return ERRID.ERR_UnableToCreateTempFile
+            End Get
+        End Property
+
+        Public Overrides ReadOnly Property ERR_MultipleAnalyzerConfigsInSameDir As Integer
+            Get
+                Return ERRID.ERR_MultipleAnalyzerConfigsInSameDir
             End Get
         End Property
 
@@ -153,9 +170,9 @@ Namespace Microsoft.CodeAnalysis.VisualBasic
             End Get
         End Property
 
-        Public Overrides ReadOnly Property FTL_InputFileNameTooLong As Integer
+        Public Overrides ReadOnly Property FTL_InvalidInputFileName As Integer
             Get
-                Return ERRID.FTL_InputFileNameTooLong
+                Return ERRID.FTL_InvalidInputFileName
             End Get
         End Property
 
@@ -210,6 +227,12 @@ Namespace Microsoft.CodeAnalysis.VisualBasic
         Public Overrides ReadOnly Property WRN_UnableToLoadAnalyzer As Integer
             Get
                 Return ERRID.WRN_UnableToLoadAnalyzer
+            End Get
+        End Property
+
+        Public Overrides ReadOnly Property WRN_AnalyzerReferencesFramework As Integer
+            Get
+                Return ERRID.WRN_AnalyzerReferencesFramework
             End Get
         End Property
 
@@ -283,6 +306,12 @@ Namespace Microsoft.CodeAnalysis.VisualBasic
         Public Overrides ReadOnly Property ERR_InvalidSubsystemVersion As Integer
             Get
                 Return ERRID.ERR_InvalidSubsystemVersion
+            End Get
+        End Property
+
+        Public Overrides ReadOnly Property ERR_InvalidHashAlgorithmName As Integer
+            Get
+                Return ERRID.ERR_InvalidHashAlgorithmName
             End Get
         End Property
 
@@ -443,37 +472,37 @@ Namespace Microsoft.CodeAnalysis.VisualBasic
             End Get
         End Property
 
-        Public Overrides Sub ReportInvalidAttributeArgument(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, parameterIndex As Integer, attribute As AttributeData)
+        Protected Overrides Sub ReportInvalidAttributeArgument(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, parameterIndex As Integer, attribute As AttributeData)
             Dim node = DirectCast(attributeSyntax, AttributeSyntax)
             diagnostics.Add(ERRID.ERR_BadAttribute1, node.ArgumentList.Arguments(parameterIndex).GetLocation(), attribute.AttributeClass)
         End Sub
 
-        Public Overrides Sub ReportInvalidNamedArgument(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, namedArgumentIndex As Integer, attributeClass As ITypeSymbol, parameterName As String)
+        Protected Overrides Sub ReportInvalidNamedArgument(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, namedArgumentIndex As Integer, attributeClass As ITypeSymbol, parameterName As String)
             Dim node = DirectCast(attributeSyntax, AttributeSyntax)
             diagnostics.Add(ERRID.ERR_BadAttribute1, node.ArgumentList.Arguments(namedArgumentIndex).GetLocation(), attributeClass)
         End Sub
 
-        Public Overrides Sub ReportParameterNotValidForType(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, namedArgumentIndex As Integer)
+        Protected Overrides Sub ReportParameterNotValidForType(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, namedArgumentIndex As Integer)
             Dim node = DirectCast(attributeSyntax, AttributeSyntax)
             diagnostics.Add(ERRID.ERR_ParameterNotValidForType, node.ArgumentList.Arguments(namedArgumentIndex).GetLocation())
         End Sub
 
-        Public Overrides Sub ReportMarshalUnmanagedTypeNotValidForFields(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, parameterIndex As Integer, unmanagedTypeName As String, attribute As AttributeData)
+        Protected Overrides Sub ReportMarshalUnmanagedTypeNotValidForFields(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, parameterIndex As Integer, unmanagedTypeName As String, attribute As AttributeData)
             Dim node = DirectCast(attributeSyntax, AttributeSyntax)
             diagnostics.Add(ERRID.ERR_MarshalUnmanagedTypeNotValidForFields, node.ArgumentList.Arguments(parameterIndex).GetLocation(), unmanagedTypeName)
         End Sub
 
-        Public Overrides Sub ReportMarshalUnmanagedTypeOnlyValidForFields(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, parameterIndex As Integer, unmanagedTypeName As String, attribute As AttributeData)
+        Protected Overrides Sub ReportMarshalUnmanagedTypeOnlyValidForFields(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, parameterIndex As Integer, unmanagedTypeName As String, attribute As AttributeData)
             Dim node = DirectCast(attributeSyntax, AttributeSyntax)
             diagnostics.Add(ERRID.ERR_MarshalUnmanagedTypeOnlyValidForFields, node.ArgumentList.Arguments(parameterIndex).GetLocation(), unmanagedTypeName)
         End Sub
 
-        Public Overrides Sub ReportAttributeParameterRequired(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, parameterName As String)
+        Protected Overrides Sub ReportAttributeParameterRequired(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, parameterName As String)
             Dim node = DirectCast(attributeSyntax, AttributeSyntax)
             diagnostics.Add(ERRID.ERR_AttributeParameterRequired1, node.Name.GetLocation(), parameterName)
         End Sub
 
-        Public Overrides Sub ReportAttributeParameterRequired(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, parameterName1 As String, parameterName2 As String)
+        Protected Overrides Sub ReportAttributeParameterRequired(diagnostics As DiagnosticBag, attributeSyntax As SyntaxNode, parameterName1 As String, parameterName2 As String)
             Dim node = DirectCast(attributeSyntax, AttributeSyntax)
             diagnostics.Add(ERRID.ERR_AttributeParameterRequired2, node.Name.GetLocation(), parameterName1, parameterName2)
         End Sub
@@ -551,6 +580,20 @@ Namespace Microsoft.CodeAnalysis.VisualBasic
                 Return ERRID.ERR_InvalidDebugInfo
             End Get
         End Property
+
+        ' Generators
+        Public Overrides ReadOnly Property WRN_GeneratorFailedDuringInitialization As Integer
+            Get
+                Return ERRID.WRN_GeneratorFailedDuringInitialization
+            End Get
+        End Property
+
+        Public Overrides ReadOnly Property WRN_GeneratorFailedDuringGeneration As Integer
+            Get
+                Return ERRID.WRN_GeneratorFailedDuringGeneration
+            End Get
+        End Property
+
     End Class
 
 End Namespace

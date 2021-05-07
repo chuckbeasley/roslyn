@@ -1,10 +1,15 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
+
+#nullable disable
 
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.CodeRefactorings;
 using Microsoft.CodeAnalysis.Editor.CSharp.UnitTests.CodeRefactorings;
 using Microsoft.CodeAnalysis.GenerateOverrides;
 using Microsoft.CodeAnalysis.PickMembers;
+using Microsoft.CodeAnalysis.Test.Utilities;
 using Roslyn.Test.Utilities;
 using Xunit;
 
@@ -42,6 +47,56 @@ class C
         return base.ToString();
     }
 }", new[] { "Equals", "GetHashCode", "ToString" });
+        }
+
+        [WorkItem(35525, "https://github.com/dotnet/roslyn/issues/35525")]
+        [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsGenerateOverrides)]
+        public async Task TestAtEndOfFile()
+        {
+            await TestWithPickMembersDialogAsync(
+@"
+class C[||]",
+@"
+class C
+{
+    public override bool Equals(object obj)
+    {
+        return base.Equals(obj);
+    }
+
+    public override int GetHashCode()
+    {
+        return base.GetHashCode();
+    }
+
+    public override string ToString()
+    {
+        return base.ToString();
+    }
+}
+", new[] { "Equals", "GetHashCode", "ToString" });
+        }
+
+        [WorkItem(48295, "https://github.com/dotnet/roslyn/issues/48295")]
+        [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsGenerateOverrides)]
+        public async Task TestOnRecordWithSemiColon()
+        {
+            await TestWithPickMembersDialogAsync(@"
+record C[||];
+", @"
+record C
+{
+    public override int GetHashCode()
+    {
+        return base.GetHashCode();
+    }
+
+    public override string ToString()
+    {
+        return base.ToString();
+    }
+}
+", new[] { "GetHashCode", "ToString" });
         }
 
         [WorkItem(17698, "https://github.com/dotnet/roslyn/issues/17698")]
@@ -88,6 +143,58 @@ class Derived : Base
         return ref base.X();
     }
 }", new[] { "X", "Y", "this[]" });
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsGenerateOverrides)]
+        public async Task TestInitOnlyProperty()
+        {
+            await TestWithPickMembersDialogAsync(
+@"
+class Base
+{
+    public virtual int Property { init => throw new NotImplementedException(); }
+}
+
+class Derived : Base
+{
+     [||]
+}",
+@"
+class Base
+{
+    public virtual int Property { init => throw new NotImplementedException(); }
+}
+
+class Derived : Base
+{
+    public override int Property { init => base.Property = value; }
+}", new[] { "Property" });
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsGenerateOverrides)]
+        public async Task TestInitOnlyIndexer()
+        {
+            await TestWithPickMembersDialogAsync(
+@"
+class Base
+{
+    public virtual int this[int i] { init => throw new NotImplementedException(); }
+}
+
+class Derived : Base
+{
+     [||]
+}",
+@"
+class Base
+{
+    public virtual int this[int i] { init => throw new NotImplementedException(); }
+}
+
+class Derived : Base
+{
+    public override int this[int i] { init => base[i] = value; }
+}", new[] { "this[]" });
         }
 
         [WorkItem(21601, "https://github.com/dotnet/roslyn/issues/21601")]

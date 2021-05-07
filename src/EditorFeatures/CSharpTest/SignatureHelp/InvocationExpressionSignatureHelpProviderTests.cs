@@ -1,13 +1,17 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
 
+#nullable disable
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.SignatureHelp;
 using Microsoft.CodeAnalysis.Editor.UnitTests.SignatureHelp;
-using Microsoft.CodeAnalysis.Editor.UnitTests.Workspaces;
-using Microsoft.CodeAnalysis.SignatureHelp;
+using Microsoft.CodeAnalysis.Test.Utilities;
 using Roslyn.Test.Utilities;
 using Xunit;
 
@@ -15,14 +19,8 @@ namespace Microsoft.CodeAnalysis.Editor.CSharp.UnitTests.SignatureHelp
 {
     public class InvocationExpressionSignatureHelpProviderTests : AbstractCSharpSignatureHelpProviderTests
     {
-        public InvocationExpressionSignatureHelpProviderTests(CSharpTestWorkspaceFixture workspaceFixture) : base(workspaceFixture)
-        {
-        }
-
-        internal override ISignatureHelpProvider CreateSignatureHelpProvider()
-        {
-            return new InvocationExpressionSignatureHelpProvider();
-        }
+        internal override Type GetSignatureHelpProviderType()
+            => typeof(InvocationExpressionSignatureHelpProvider);
 
         #region "Regular tests"
 
@@ -200,6 +198,103 @@ class C
 
             var expectedOrderedItems = new List<SignatureHelpTestItem>();
             expectedOrderedItems.Add(new SignatureHelpTestItem("void C.Goo(int a, int b)", "Summary for Goo", "Param b", currentParameterIndex: 1));
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(26713, "https://github.com/dotnet/roslyn/issues/26713")]
+        public async Task TestDelegateParameterWithDocumentation_Invoke()
+        {
+            var markup = @"
+class C
+{
+    /// <param name=""a"">Parameter docs</param>
+    delegate void SomeDelegate(int a);
+
+    void M(SomeDelegate theDelegate)
+    {
+        [|theDelegate($$|]);
+    }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("void SomeDelegate(int a)", parameterDocumentation: "Parameter docs", currentParameterIndex: 0),
+            };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(26713, "https://github.com/dotnet/roslyn/issues/26713")]
+        public async Task TestDelegateParameterWithDocumentation_Invoke2()
+        {
+            var markup = @"
+class C
+{
+    /// <param name=""a"">Parameter docs</param>
+    delegate void SomeDelegate(int a);
+
+    void M(SomeDelegate theDelegate)
+    {
+        [|theDelegate.Invoke($$|]);
+    }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("void SomeDelegate.Invoke(int a)", parameterDocumentation: "Parameter docs", currentParameterIndex: 0),
+            };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(26713, "https://github.com/dotnet/roslyn/issues/26713")]
+        public async Task TestDelegateParameterWithDocumentation_BeginInvoke()
+        {
+            var markup = @"
+class C
+{
+    /// <param name=""a"">Parameter docs</param>
+    delegate void SomeDelegate(int a);
+
+    void M(SomeDelegate theDelegate)
+    {
+        [|theDelegate.BeginInvoke($$|]);
+    }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("System.IAsyncResult SomeDelegate.BeginInvoke(int a, System.AsyncCallback callback, object @object)", parameterDocumentation: "Parameter docs", currentParameterIndex: 0)
+            };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(26713, "https://github.com/dotnet/roslyn/issues/26713")]
+        public async Task TestDelegateParameterWithDocumentation_BeginInvoke2()
+        {
+            var markup = @"
+class C
+{
+    /// <param name=""a"">Parameter docs</param>
+    /// <param name=""callback"">This should not be displayed</param>
+    delegate void SomeDelegate(int a);
+
+    void M(SomeDelegate theDelegate)
+    {
+        [|theDelegate.BeginInvoke(0, $$|]);
+    }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("System.IAsyncResult SomeDelegate.BeginInvoke(int a, System.AsyncCallback callback, object @object)", parameterDocumentation: null, currentParameterIndex: 1)
+            };
 
             await TestAsync(markup, expectedOrderedItems);
         }
@@ -863,6 +958,30 @@ class C
         #endregion
 
         #region "Trigger tests"
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(47364, "https://github.com/dotnet/roslyn/issues/47364")]
+        public async Task TestInvocationOnTriggerParens_OptionalDefaultStruct()
+        {
+            var markup = @"
+using System;
+using System.Threading;
+
+class Program
+{
+   static void SomeMethod(CancellationToken token = default) => throw new NotImplementedException();
+
+    static void Main(string[] args)
+    {
+        [|SomeMethod($$|]);
+    }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>();
+            expectedOrderedItems.Add(new SignatureHelpTestItem("void Program.SomeMethod([CancellationToken token = default])", string.Empty, null, currentParameterIndex: 0));
+
+            await TestAsync(markup, expectedOrderedItems, usePreviousCharAsTrigger: true);
+        }
 
         [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
         public async Task TestInvocationOnTriggerParens()
@@ -1555,12 +1674,8 @@ class C
     }
 }";
 
-            var description = $@"
-{WorkspacesResources.Usage_colon}
-  await Goo();";
-
             var expectedOrderedItems = new List<SignatureHelpTestItem>();
-            expectedOrderedItems.Add(new SignatureHelpTestItem($"({CSharpFeaturesResources.awaitable}) Task C.Goo()", methodDocumentation: description, currentParameterIndex: 0));
+            expectedOrderedItems.Add(new SignatureHelpTestItem($"({CSharpFeaturesResources.awaitable}) Task C.Goo()", methodDocumentation: string.Empty, currentParameterIndex: 0));
 
             await TestSignatureHelpWithMscorlib45Async(markup, expectedOrderedItems, "C#");
         }
@@ -1578,17 +1693,13 @@ class C
     }
 }";
 
-            var description = $@"
-{WorkspacesResources.Usage_colon}
-  Task<int> x = await Goo();";
-
             var expectedOrderedItems = new List<SignatureHelpTestItem>();
-            expectedOrderedItems.Add(new SignatureHelpTestItem($"({CSharpFeaturesResources.awaitable}) Task<Task<int>> C.Goo()", methodDocumentation: description, currentParameterIndex: 0));
+            expectedOrderedItems.Add(new SignatureHelpTestItem($"({CSharpFeaturesResources.awaitable}) Task<Task<int>> C.Goo()", methodDocumentation: string.Empty, currentParameterIndex: 0));
 
             await TestSignatureHelpWithMscorlib45Async(markup, expectedOrderedItems, "C#");
         }
 
-        #endregion 
+        #endregion
 
         [WorkItem(13849, "DevDiv_Projects/Roslyn")]
         [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
@@ -1680,6 +1791,179 @@ class Program
         }
 
         [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(25830, "https://github.com/dotnet/roslyn/issues/25830")]
+        public async Task PickCorrectOverload_PickInt()
+        {
+            var markup = @"
+class Program
+{
+    static void Main()
+    {
+        [|M(1$$|]);
+    }
+    static void M(int i) { }
+    static void M(string s) { }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("void Program.M(int i)", currentParameterIndex: 0, isSelected: true),
+                new SignatureHelpTestItem($"void Program.M(string s)", currentParameterIndex: 0),
+            };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(25830, "https://github.com/dotnet/roslyn/issues/25830")]
+        public async Task PickCorrectOverload_PickInt_ReverseOrder()
+        {
+            var markup = @"
+class Program
+{
+    static void Main()
+    {
+        [|M(1$$|]);
+    }
+    static void M(string s) { }
+    static void M(int i) { }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("void Program.M(int i)", currentParameterIndex: 0, isSelected: true),
+                new SignatureHelpTestItem($"void Program.M(string s)", currentParameterIndex: 0),
+            };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(25830, "https://github.com/dotnet/roslyn/issues/25830")]
+        public async Task PickCorrectOverload_PickSecond()
+        {
+            var markup = @"
+class Program
+{
+    static void Main()
+    {
+        [|M(null$$|]);
+    }
+    static void M(int i) { }
+    static void M(string s) { }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("void Program.M(int i)", currentParameterIndex: 0),
+                new SignatureHelpTestItem($"void Program.M(string s)", currentParameterIndex: 0, isSelected: true),
+            };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(25830, "https://github.com/dotnet/roslyn/issues/25830")]
+        public async Task PickCorrectOverload_FilterFirst_PickIntRemaining()
+        {
+            var markup = @"
+class D
+{
+    static void Main()
+    {
+        [|M(i: 42$$|]);
+    }
+    static void M(D filtered) { }
+    static void M(int i) { }
+    static void M(string i) { }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("void D.M(int i)", currentParameterIndex: 0, isSelected: true),
+                new SignatureHelpTestItem($"void D.M(string i)", currentParameterIndex: 0),
+            };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(25830, "https://github.com/dotnet/roslyn/issues/25830")]
+        public async Task PickCorrectOverload_FilterFirst_PickIntRemaining_ConversionToD()
+        {
+            var markup = @"
+class D
+{
+    static void Main()
+    {
+        [|M(i: 42$$|]);
+    }
+    static void M(D filtered) { }
+    static void M(int i) { }
+    static void M(string i) { }
+    static implicit operator D(int i) => throw null;
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("void D.M(int i)", currentParameterIndex: 0, isSelected: true),
+                new SignatureHelpTestItem($"void D.M(string i)", currentParameterIndex: 0),
+            };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(25830, "https://github.com/dotnet/roslyn/issues/25830")]
+        public async Task PickCorrectOverload_FilterFirst_PickIntRemaining_ReversedOrder()
+        {
+            var markup = @"
+class D
+{
+    static void Main()
+    {
+        [|M(i: 42$$|]);
+    }
+    static void M(string i) { }
+    static void M(int i) { }
+    static void M(D filtered) { }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("void D.M(int i)", currentParameterIndex: 0, isSelected: true),
+                new SignatureHelpTestItem($"void D.M(string i)", currentParameterIndex: 0),
+            };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [WorkItem(25830, "https://github.com/dotnet/roslyn/issues/25830")]
+        public async Task PickCorrectOverload_FilterFirst_PickStringRemaining()
+        {
+            var markup = @"
+class D
+{
+    static void Main()
+    {
+        [|M(i: null$$|]);
+    }
+    static void M(D filtered) { }
+    static void M(int i) { }
+    static void M(string i) { }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("void D.M(int i)", currentParameterIndex: 0),
+                new SignatureHelpTestItem($"void D.M(string i)", currentParameterIndex: 0, isSelected: true),
+            };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
         public async Task TestInvocationWithCrefXmlComments()
         {
             var markup = @"
@@ -1727,7 +2011,7 @@ class C
         <Document IsLinkFile=""true"" LinkAssemblyName=""Proj1"" LinkFilePath=""SourceDocument""/>
     </Project>
 </Workspace>";
-            var expectedDescription = new SignatureHelpTestItem($"void C.bar()\r\n\r\n{string.Format(FeaturesResources._0_1, "Proj1", FeaturesResources.Available)}\r\n{string.Format(FeaturesResources._0_1, "Proj2", FeaturesResources.Not_Available)}\r\n\r\n{FeaturesResources.You_can_use_the_navigation_bar_to_switch_context}", currentParameterIndex: 0);
+            var expectedDescription = new SignatureHelpTestItem($"void C.bar()\r\n\r\n{string.Format(FeaturesResources._0_1, "Proj1", FeaturesResources.Available)}\r\n{string.Format(FeaturesResources._0_1, "Proj2", FeaturesResources.Not_Available)}\r\n\r\n{FeaturesResources.You_can_use_the_navigation_bar_to_switch_contexts}", currentParameterIndex: 0);
             await VerifyItemWithReferenceWorkerAsync(markup, new[] { expectedDescription }, false);
         }
 
@@ -1763,7 +2047,7 @@ class C
     </Project>
 </Workspace>";
 
-            var expectedDescription = new SignatureHelpTestItem($"void C.bar()\r\n\r\n{string.Format(FeaturesResources._0_1, "Proj1", FeaturesResources.Available)}\r\n{string.Format(FeaturesResources._0_1, "Proj3", FeaturesResources.Not_Available)}\r\n\r\n{FeaturesResources.You_can_use_the_navigation_bar_to_switch_context}", currentParameterIndex: 0);
+            var expectedDescription = new SignatureHelpTestItem($"void C.bar()\r\n\r\n{string.Format(FeaturesResources._0_1, "Proj1", FeaturesResources.Available)}\r\n{string.Format(FeaturesResources._0_1, "Proj3", FeaturesResources.Not_Available)}\r\n\r\n{FeaturesResources.You_can_use_the_navigation_bar_to_switch_contexts}", currentParameterIndex: 0);
             await VerifyItemWithReferenceWorkerAsync(markup, new[] { expectedDescription }, false);
         }
 
@@ -1941,7 +2225,7 @@ class C
     </Project>
 </Workspace>";
 
-            var expectedDescription = new SignatureHelpTestItem($"void C.Do(int x)", currentParameterIndex: 0);
+            var expectedDescription = new SignatureHelpTestItem($"void C.Do(int x)\r\n\r\n{string.Format(FeaturesResources._0_1, "Proj1", FeaturesResources.Available)}\r\n{string.Format(FeaturesResources._0_1, "Proj2", FeaturesResources.Not_Available)}\r\n\r\n{FeaturesResources.You_can_use_the_navigation_bar_to_switch_contexts}", currentParameterIndex: 0);
             await VerifyItemWithReferenceWorkerAsync(markup, new[] { expectedDescription }, false);
         }
 
@@ -2093,6 +2377,154 @@ class C
             expectedOrderedItems.Add(new SignatureHelpTestItem("int C.Goo(object x)", currentParameterIndex: 0));
 
             await TestAsync(markup, expectedOrderedItems, usePreviousCharAsTrigger: true);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        public async Task PickCorrectOverload_WithCorrectSelectionAfterFilteringOutNoApplicableItems()
+        {
+            var markup = @"
+class Comparer
+{
+    public static bool Equals(object x, object y) => true;
+    public bool Equals(object x) => true;
+    public bool Equals(string x, string y) => true;
+}
+
+class Program
+{
+    static void Main(string x, string y)
+    {
+        var comparer = new Comparer();
+        comparer.Equals(x, y$$);
+    }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem>
+            {
+                new SignatureHelpTestItem("bool Comparer.Equals(object x)", currentParameterIndex: 1),
+                new SignatureHelpTestItem("bool Comparer.Equals(string x, string y)", currentParameterIndex: 1, isSelected: true),
+            };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [WorkItem(38074, "https://github.com/dotnet/roslyn/issues/38074")]
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [CompilerTrait(CompilerFeature.LocalFunctions)]
+        public async Task TestLocalFunction()
+        {
+            var markup = @"
+class C
+{
+    void M()
+    {
+        void Local() { }
+        Local($$);
+    }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem> { new SignatureHelpTestItem("void Local()") };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [WorkItem(38074, "https://github.com/dotnet/roslyn/issues/38074")]
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [CompilerTrait(CompilerFeature.LocalFunctions)]
+        public async Task TestLocalFunctionInStaticMethod()
+        {
+            var markup = @"
+class C
+{
+    static void M()
+    {
+        void Local() { }
+        Local($$);
+    }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem> { new SignatureHelpTestItem("void Local()") };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [CompilerTrait(CompilerFeature.FunctionPointers)]
+        public async Task TestFunctionPointer()
+        {
+            var markup = @"
+class C
+{
+    unsafe static void M()
+    {
+        delegate*<int, int> functionPointer;
+        functionPointer($$);
+    }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem> { new SignatureHelpTestItem("int delegate*(int)", currentParameterIndex: 0) };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        [CompilerTrait(CompilerFeature.FunctionPointers)]
+        public async Task TestFunctionPointerMultipleArguments()
+        {
+            var markup = @"
+class C
+{
+    unsafe static void M()
+    {
+        delegate*<string, long, int> functionPointer;
+        functionPointer("""", $$);
+    }
+}";
+
+            var expectedOrderedItems = new List<SignatureHelpTestItem> { new SignatureHelpTestItem("int delegate*(string, long)", currentParameterIndex: 1) };
+
+            await TestAsync(markup, expectedOrderedItems);
+        }
+
+        [Theory, CombinatorialData, Trait(Traits.Feature, Traits.Features.SignatureHelp)]
+        public async Task ShowWarningForOverloadUnavailableInRelatedDocument(bool typeParameterProvided)
+        {
+            var markup = $@"<Workspace>
+    <Project Language=""C#"" CommonReferences=""true"" AssemblyName=""Proj1"" PreprocessorSymbols=""TFM"">
+        <Document FilePath=""SourceDocument""><![CDATA[
+class C
+{{
+    public void M(object o) => false;
+#if TFM
+    public void M<T>(Action<T> arg1, T arg2, bool flag) => false;
+#endif
+
+    void goo()
+    {{
+        M{(typeParameterProvided ? "<object>" : string.Empty)}($$
+    }}
+}}
+]]>
+        </Document>
+    </Project>
+    <Project Language=""C#"" CommonReferences=""true"" AssemblyName=""Proj2"">
+        <Document IsLinkFile=""true"" LinkAssemblyName=""Proj1"" LinkFilePath=""SourceDocument"" />
+    </Project>
+</Workspace>";
+
+            var expectedItems = new List<SignatureHelpTestItem>();
+
+            if (typeParameterProvided)
+            {
+                // If generic method is instantiated, non-generic overloads would be excluded (desciption would be instantiated as well, i.e. object instead of T)
+                expectedItems.Add(new SignatureHelpTestItem($"void C.M<object>(Action<object> arg1, object arg2, bool flag)\r\n\r\n{string.Format(FeaturesResources._0_1, "Proj1", FeaturesResources.Available)}\r\n{string.Format(FeaturesResources._0_1, "Proj2", FeaturesResources.Not_Available)}\r\n\r\n{FeaturesResources.You_can_use_the_navigation_bar_to_switch_contexts}", currentParameterIndex: 0));
+            }
+            else
+            {
+                expectedItems.Add(new SignatureHelpTestItem($"void C.M(object o)", currentParameterIndex: 0));
+                expectedItems.Add(new SignatureHelpTestItem($"void C.M<T>(Action<T> arg1, T arg2, bool flag)\r\n\r\n{string.Format(FeaturesResources._0_1, "Proj1", FeaturesResources.Available)}\r\n{string.Format(FeaturesResources._0_1, "Proj2", FeaturesResources.Not_Available)}\r\n\r\n{FeaturesResources.You_can_use_the_navigation_bar_to_switch_contexts}", currentParameterIndex: 0));
+            }
+            await VerifyItemWithReferenceWorkerAsync(markup, expectedItems, hideAdvancedMembers: false);
         }
     }
 }

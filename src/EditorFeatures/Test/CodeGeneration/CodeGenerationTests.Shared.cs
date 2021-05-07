@@ -1,14 +1,19 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
+
+#nullable disable
 
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.CodeGeneration;
-using Roslyn.Test.Utilities;
+using Microsoft.CodeAnalysis.Test.Utilities;
 using Xunit;
 
 namespace Microsoft.CodeAnalysis.Editor.UnitTests.CodeGeneration
 {
     public partial class CodeGenerationTests
     {
+        [UseExportProvider]
         public class Shared
         {
             [Fact, Trait(Traits.Feature, Traits.Features.CodeGenerationSortDeclarations)]
@@ -557,13 +562,15 @@ End Structure";
             [Fact, Trait(Traits.Feature, Traits.Features.CodeGenerationSortDeclarations)]
             public async Task TestDefaultTypeMemberAccessibility2()
             {
+                var codeGenOptionNoBody = new CodeGenerationOptions(generateMethodBodies: false);
+
                 var generationSource = "public class [|C|] { private void B(){} public void C(){}  }";
                 var initial = "public interface [|I|] { void A(); }";
                 var expected = @"public interface I { void A();
     void B();
     void C();
 }";
-                await TestGenerateFromSourceSymbolAsync(generationSource, initial, expected, onlyGenerateMembers: true);
+                await TestGenerateFromSourceSymbolAsync(generationSource, initial, expected, onlyGenerateMembers: true, codeGenerationOptions: codeGenOptionNoBody);
 
                 initial = "Public Interface [|I|] \n Sub A() \n End Interface";
                 expected = @"Public Interface I 
@@ -571,7 +578,7 @@ End Structure";
     Sub B()
     Sub C()
 End Interface";
-                await TestGenerateFromSourceSymbolAsync(generationSource, initial, expected, onlyGenerateMembers: true);
+                await TestGenerateFromSourceSymbolAsync(generationSource, initial, expected, onlyGenerateMembers: true, codeGenerationOptions: codeGenOptionNoBody);
 
                 initial = "Public Class [|C|] \n Sub A() \n End Sub \n End Class";
                 expected = @"Public Class C 

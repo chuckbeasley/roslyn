@@ -1,35 +1,46 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
+
+#nullable disable
 
 using System;
-using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using Microsoft.CodeAnalysis.Editor.Host;
+using Microsoft.CodeAnalysis.Editor.Shared.Utilities;
+using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.Shared.TestHooks;
 using Microsoft.VisualStudio.Text;
+using Microsoft.VisualStudio.Utilities;
 
 namespace Microsoft.CodeAnalysis.Editor.Implementation.NavigationBar
 {
     [Export(typeof(INavigationBarControllerFactoryService))]
     internal class NavigationBarControllerFactoryService : INavigationBarControllerFactoryService
     {
-        private readonly IWaitIndicator _waitIndicator;
-        private readonly AggregateAsynchronousOperationListener _asyncListener;
+        private readonly IThreadingContext _threadingContext;
+        private readonly IUIThreadOperationExecutor _uIThreadOperationExecutor;
+        private readonly IAsynchronousOperationListener _asyncListener;
 
         [ImportingConstructor]
+        [Obsolete(MefConstruction.ImportingConstructorMessage, error: true)]
         public NavigationBarControllerFactoryService(
-            IWaitIndicator waitIndicator,
-            [ImportMany] IEnumerable<Lazy<IAsynchronousOperationListener, FeatureMetadata>> asyncListeners)
+            IThreadingContext threadingContext,
+            IUIThreadOperationExecutor uIThreadOperationExecutor,
+            IAsynchronousOperationListenerProvider listenerProvider)
         {
-            _waitIndicator = waitIndicator;
-            _asyncListener = new AggregateAsynchronousOperationListener(asyncListeners, FeatureAttribute.NavigationBar);
+            _threadingContext = threadingContext;
+            _uIThreadOperationExecutor = uIThreadOperationExecutor;
+            _asyncListener = listenerProvider.GetListener(FeatureAttribute.NavigationBar);
         }
 
         public INavigationBarController CreateController(INavigationBarPresenter presenter, ITextBuffer textBuffer)
         {
             return new NavigationBarController(
+                _threadingContext,
                 presenter,
                 textBuffer,
-                _waitIndicator,
+                _uIThreadOperationExecutor,
                 _asyncListener);
         }
     }

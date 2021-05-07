@@ -1,4 +1,10 @@
-﻿using Microsoft.CodeAnalysis.Test.Utilities;
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
+
+#nullable disable
+
+using Microsoft.CodeAnalysis.Test.Utilities;
 using Roslyn.Test.Utilities;
 using Xunit;
 
@@ -8,9 +14,122 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
     public class LocalFunctions : FlowTestBase
     {
         [Fact]
+        [WorkItem(17829, "https://github.com/dotnet/roslyn/issues/17829")]
+        public void UncalledLambdaInLocalFunction()
+        {
+            var comp = CreateCompilation(@"
+using System;
+class C
+{
+    void M()
+    {
+        void L()
+        {
+            Action a = () =>
+            {
+                int x;
+                x++;
+            };
+        }
+    }
+}");
+            comp.VerifyDiagnostics(
+                // (12,17): error CS0165: Use of unassigned local variable 'x'
+                //                 x++;
+                Diagnostic(ErrorCode.ERR_UseDefViolation, "x").WithArguments("x").WithLocation(12, 17),
+                // (7,14): warning CS8321: The local function 'L' is declared but never used
+                //         void L()
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L").WithArguments("L").WithLocation(7, 14));
+        }
+
+        [Fact]
+        [WorkItem(17829, "https://github.com/dotnet/roslyn/issues/17829")]
+        public void LambdaInNestedUncalledLocalFunctions()
+        {
+            var comp = CreateCompilation(@"
+using System;
+class C
+{
+    void M()
+    {
+        void L1()
+        {
+            void L2()
+            {
+                Action a = () =>
+                {
+                    int x;
+                    x++;
+                };
+            }
+            L2();
+        }
+    }
+}");
+            comp.VerifyDiagnostics(
+                // (14,21): error CS0165: Use of unassigned local variable 'x'
+                //                     x++;
+                Diagnostic(ErrorCode.ERR_UseDefViolation, "x").WithArguments("x").WithLocation(14, 21),
+                // (7,14): warning CS8321: The local function 'L1' is declared but never used
+                //         void L1()
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L1").WithArguments("L1").WithLocation(7, 14));
+        }
+
+        [Fact]
+        [WorkItem(17829, "https://github.com/dotnet/roslyn/issues/17829")]
+        public void CapturedInLambdaInUncalledLocalFunction()
+        {
+            var comp = CreateCompilation(@"
+using System;
+class C
+{
+    void M()
+    {
+        void L()
+        {
+            int x;
+            Action f = () => x++;
+        }
+    }
+}");
+            comp.VerifyDiagnostics(
+                // (10,30): error CS0165: Use of unassigned local variable 'x'
+                //             Action f = () => x++;
+                Diagnostic(ErrorCode.ERR_UseDefViolation, "x").WithArguments("x").WithLocation(10, 30),
+                // (7,14): warning CS8321: The local function 'L' is declared but never used
+                //         void L()
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L").WithArguments("L").WithLocation(7, 14));
+        }
+
+        [Fact]
+        [WorkItem(17829, "https://github.com/dotnet/roslyn/issues/17829")]
+        public void CapturedInNestedUncalledLocalFunctions()
+        {
+            var comp = CreateCompilation(@"
+class C
+{
+    void M()
+    {
+        void L1()
+        {
+            int x;
+            void L2() => x++;
+        }
+    }
+}");
+            comp.VerifyDiagnostics(
+                // (9,18): warning CS8321: The local function 'L2' is declared but never used
+                //             void L2() => x++;
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L2").WithArguments("L2").WithLocation(9, 18),
+                // (6,14): warning CS8321: The local function 'L1' is declared but never used
+                //         void L1()
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L1").WithArguments("L1").WithLocation(6, 14));
+        }
+
+        [Fact]
         public void ConstUnassigned()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     void M()
@@ -33,7 +152,7 @@ class C
         [Fact]
         public void ConstUnassigned2()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     void M()
@@ -52,7 +171,7 @@ class C
         [Fact]
         public void ConstUnassigned3()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     void M()
@@ -72,7 +191,7 @@ class C
         [WorkItem(14243, "https://github.com/dotnet/roslyn/issues/14243")]
         public void AssignInsideCallToLocalFunc()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public void M()
@@ -104,7 +223,7 @@ class C
         [WorkItem(14046, "https://github.com/dotnet/roslyn/issues/14046")]
         public void UnreachableAfterThrow()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
   public void M3()
@@ -132,7 +251,7 @@ class C
         [WorkItem(13739, "https://github.com/dotnet/roslyn/issues/13739")]
         public void UnreachableRecursion()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public void M()
@@ -154,7 +273,7 @@ class C
         [Fact]
         public void ReadBeforeUnreachable()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public void M()
@@ -179,7 +298,7 @@ class C
         [WorkItem(13739, "https://github.com/dotnet/roslyn/issues/13739")]
         public void MutualRecursiveUnreachable()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public static void M()
@@ -211,7 +330,7 @@ class C
         [WorkItem(13739, "https://github.com/dotnet/roslyn/issues/13739")]
         public void AssignedInDeadBranch()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 using System;
 
 class Program
@@ -242,7 +361,7 @@ class Program
         [Fact]
         public void InvalidBranchOutOfLocalFunc()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public static void M()
@@ -270,18 +389,15 @@ class C
     }
 }");
             comp.VerifyDiagnostics(
-                // (14,13): error CS0159: No such label 'label1' within the scope of the goto statement
-                //             goto label1;
-                Diagnostic(ErrorCode.ERR_LabelNotFound, "goto").WithArguments("label1").WithLocation(14, 13),
-                // (19,13): error CS0139: No enclosing loop out of which to break or continue
-                //             break;
-                Diagnostic(ErrorCode.ERR_NoBreakOrCont, "break;").WithLocation(19, 13),
-                // (24,13): error CS0139: No enclosing loop out of which to break or continue
-                //             continue;
-                Diagnostic(ErrorCode.ERR_NoBreakOrCont, "continue;").WithLocation(24, 13),
-                // (6,9): warning CS0164: This label has not been referenced
-                //         label1:
-                Diagnostic(ErrorCode.WRN_UnreferencedLabel, "label1").WithLocation(6, 9));
+                    // (19,13): error CS0139: No enclosing loop out of which to break or continue
+                    //             break;
+                    Diagnostic(ErrorCode.ERR_NoBreakOrCont, "break;").WithLocation(19, 13),
+                    // (24,13): error CS0139: No enclosing loop out of which to break or continue
+                    //             continue;
+                    Diagnostic(ErrorCode.ERR_NoBreakOrCont, "continue;").WithLocation(24, 13),
+                    // (14,13): error CS0159: No such label 'label1' within the scope of the goto statement
+                    //             goto label1;
+                    Diagnostic(ErrorCode.ERR_LabelNotFound, "goto").WithArguments("label1").WithLocation(14, 13));
         }
 
         [Fact]
@@ -371,7 +487,7 @@ class C
         [Fact]
         public void SimpleForwardCall()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public static void Main()
@@ -386,7 +502,7 @@ class C
         [Fact]
         public void DefinedWhenCalled()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public static void Main()
@@ -403,7 +519,7 @@ class C
         [Fact]
         public void NotDefinedWhenCalled()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public static void Main()
@@ -423,7 +539,7 @@ class C
         [Fact]
         public void ChainedDef()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public static void Main()
@@ -444,7 +560,7 @@ class C
         [Fact]
         public void SetInLocalFunc()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public static void Main()
@@ -466,7 +582,7 @@ class C
         [Fact]
         public void SetInLocalFuncMutual()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public static void Main()
@@ -492,7 +608,7 @@ class C
         [Fact]
         public void LongWriteChain()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public void M()
@@ -526,7 +642,7 @@ class C
         [Fact]
         public void ConvertBeforeDefined()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public static void Main()
@@ -547,7 +663,7 @@ class C
         [Fact]
         public void NestedCapture()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public static void Main()
@@ -570,7 +686,7 @@ class C
         [Fact]
         public void UnusedLocalFunc()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public static void Main()
@@ -588,7 +704,7 @@ class C
         [Fact]
         public void UnassignedInStruct()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 struct S
 {
     int _x;
@@ -603,7 +719,7 @@ struct S
     }
 }");
             comp.VerifyDiagnostics(
-                // (10,20): error CS1673: Anonymous methods, lambda expressions, and query expressions inside structs cannot access instance members of 'this'. Consider copying 'this' to a local variable outside the anonymous method, lambda expression or query expression and using the local instead.
+                // (10,20): error CS1673: Anonymous methods, lambda expressions, query expressions, and local functions inside structs cannot access instance members of 'this'. Consider copying 'this' to a local variable outside the anonymous method, lambda expression, query expression, or local function and using the local instead.
                 //             s._x = _x;
                 Diagnostic(ErrorCode.ERR_ThisStructNotInAnonMeth, "_x").WithLocation(10, 20),
                 // (7,17): error CS0188: The 'this' object cannot be used before all of its fields are assigned to
@@ -620,7 +736,7 @@ struct S
         [Fact]
         public void AssignWithStruct()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 struct S
 {
     public int x;
@@ -690,7 +806,7 @@ class C
         [Fact]
         public void NestedStructProperty()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 struct A
 {
     public int x;
@@ -783,7 +899,7 @@ class C
         [Fact]
         public void WriteAndReadInLocalFunc()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     public void M()
@@ -808,7 +924,7 @@ class C
         [Fact]
         public void EventReadAndWrite()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 using System;
 
 struct S
@@ -880,7 +996,7 @@ class C
         [Fact]
         public void CaptureForeachVar()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     void M()
@@ -905,7 +1021,7 @@ class C
         [Fact]
         public void CapturePattern()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     void M()
@@ -943,7 +1059,7 @@ class C
         [Fact]
         public void NotAssignedControlFlow()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     void FullyAssigned()
@@ -992,7 +1108,7 @@ class C
         [Fact]
         public void UseConsts()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 struct S
 {
     public const int z = 0;
@@ -1019,7 +1135,7 @@ class C
         [Fact]
         public void NotAssignedAtAllReturns()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     void M()
@@ -1049,7 +1165,7 @@ class C
         [Fact]
         public void NotAssignedAtThrow()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     void M()
@@ -1087,7 +1203,7 @@ class C
         [Fact]
         public void DeadCode()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     void M()
@@ -1124,7 +1240,7 @@ class C
         [Fact]
         public void LocalFunctionFromOtherSwitch()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     void M()
@@ -1160,7 +1276,7 @@ class C
         [WorkItem(15298, "https://github.com/dotnet/roslyn/issues/15298")]
         public void UnassignedUndefinedVariable()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class C
 {
     void M()
@@ -1190,7 +1306,7 @@ class C
         [WorkItem(15322, "https://github.com/dotnet/roslyn/issues/15322")]
         public void UseBeforeDeclarationInSwitch()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class Program
 {
     static void Main(object[] args)
@@ -1216,7 +1332,7 @@ class Program
         [WorkItem(14097, "https://github.com/dotnet/roslyn/issues/14097")]
         public void PiecewiseStructAssign()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 struct S { public int X, Y; }
 
 class C
@@ -1240,7 +1356,7 @@ class C
         [WorkItem(14097, "https://github.com/dotnet/roslyn/issues/14097")]
         public void PiecewiseStructAssign2()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 struct S
 {
     public int X;
@@ -1266,7 +1382,7 @@ struct S
         [WorkItem(14097, "https://github.com/dotnet/roslyn/issues/14097")]
         public void PiecewiseStructAssign3()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 struct S { }
 struct S2
 { 
@@ -1322,7 +1438,7 @@ class C
         [WorkItem(14097, "https://github.com/dotnet/roslyn/issues/14097")]
         public void PiecewiseStructAssignmentInConstructor()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 struct S
 {
     public int _x;
@@ -1342,10 +1458,10 @@ struct S
             // Note that definite assignment is still validated in this
             // compilation
             comp.VerifyDiagnostics(
-                // (12,13): error CS1673: Anonymous methods, lambda expressions, and query expressions inside structs cannot access instance members of 'this'. Consider copying 'this' to a local variable outside the anonymous method, lambda expression or query expression and using the local instead.
+                // (12,13): error CS1673: Anonymous methods, lambda expressions, query expressions, and local functions inside structs cannot access instance members of 'this'. Consider copying 'this' to a local variable outside the anonymous method, lambda expression, query expression, or local function and using the local instead.
                 //             _x = 0;
                 Diagnostic(ErrorCode.ERR_ThisStructNotInAnonMeth, "_x").WithLocation(12, 13),
-                // (13,20): error CS1673: Anonymous methods, lambda expressions, and query expressions inside structs cannot access instance members of 'this'. Consider copying 'this' to a local variable outside the anonymous method, lambda expression or query expression and using the local instead.
+                // (13,20): error CS1673: Anonymous methods, lambda expressions, query expressions, and local functions inside structs cannot access instance members of 'this'. Consider copying 'this' to a local variable outside the anonymous method, lambda expression, query expression, or local function and using the local instead.
                 //             S s2 = this;
                 Diagnostic(ErrorCode.ERR_ThisStructNotInAnonMeth, "this").WithLocation(13, 20));
         }
@@ -1354,7 +1470,7 @@ struct S
         [WorkItem(14097, "https://github.com/dotnet/roslyn/issues/14097")]
         public void PiecewiseStructAssignmentInConstructor2()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 struct S
 {
     public int _x;
@@ -1372,7 +1488,7 @@ struct S
     }
 }");
             comp.VerifyDiagnostics(
-                // (12,20): error CS1673: Anonymous methods, lambda expressions, and query expressions inside structs cannot access instance members of 'this'. Consider copying 'this' to a local variable outside the anonymous method, lambda expression or query expression and using the local instead.
+                // (12,20): error CS1673: Anonymous methods, lambda expressions, query expressions, and local functions inside structs cannot access instance members of 'this'. Consider copying 'this' to a local variable outside the anonymous method, lambda expression, query expression, or local function and using the local instead.
                 //             S s2 = this;
                 Diagnostic(ErrorCode.ERR_ThisStructNotInAnonMeth, "this").WithLocation(12, 20),
                 // (14,9): error CS0170: Use of possibly unassigned field '_x'
@@ -1384,7 +1500,7 @@ struct S
         [WorkItem(18813, "https://github.com/dotnet/roslyn/issues/18813")]
         public void LocalIEnumerableFunctionWithOutParameter1()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class c
 {
     static void Main(string[] args)
@@ -1400,7 +1516,7 @@ class c
 }");
 
             comp.VerifyDiagnostics(
-                // (6,83): error CS1623: Iterators cannot have ref or out parameters
+                // (6,83): error CS1623: Iterators cannot have ref, in or out parameters
                 //         System.Collections.Generic.IEnumerable<string> getGoo(int count, out bool goobar)
                 Diagnostic(ErrorCode.ERR_BadIteratorArgType, "output"),
                 // (6,56): error CS0177: The out parameter 'goobar' must be assigned to before control leaves the current method
@@ -1412,7 +1528,7 @@ class c
         [WorkItem(18813, "https://github.com/dotnet/roslyn/issues/18813")]
         public void LocalIEnumerableFunctionWithOutParameter2()
         {
-            var comp = CreateStandardCompilation(@"
+            var comp = CreateCompilation(@"
 class c
 {
     static void Main(string[] args)
@@ -1433,12 +1549,76 @@ class c
 }");
 
             comp.VerifyDiagnostics(
-                // (6,83): error CS1623: Iterators cannot have ref or out parameters
+                // (6,83): error CS1623: Iterators cannot have ref, in or out parameters
                 //         System.Collections.Generic.IEnumerable<string> getGoo(int count, out bool goobar)
                 Diagnostic(ErrorCode.ERR_BadIteratorArgType, "output"),
                 // (6,56): error CS0177: The out parameter 'goobar' must be assigned to before control leaves the current method
                 //         System.Collections.Generic.IEnumerable<string> getGoo(int count, out bool goobar)
                 Diagnostic(ErrorCode.ERR_ParamUnassigned, "getGoo").WithArguments("output").WithLocation(6, 56));
+        }
+
+        [Fact]
+        [WorkItem(41631, "https://github.com/dotnet/roslyn/issues/41631")]
+        public void UseOfCapturedVariableAssignedByOutParameter()
+        {
+            CreateCompilation(@"
+public class C
+{
+    void M()
+    {
+        string s0;
+        local1(out s0); // 1
+    
+        void local1(out string s1)
+        {
+            s0.ToString();
+            s1 = ""hello"";
+        }
+    }
+}").VerifyDiagnostics(
+                    // (7,9): error CS0165: Use of unassigned local variable 's0'
+                    //         local1(out s0);
+                    Diagnostic(ErrorCode.ERR_UseDefViolation, "local1(out s0)").WithArguments("s0").WithLocation(7, 9));
+        }
+
+        [Fact]
+        public void OutParameterIsAssignedByLocalFunction()
+        {
+            CreateCompilation(@"
+public class C
+{
+    void M()
+    {
+        string s0;
+        local1(out s0);
+        s0.ToString();
+    
+        void local1(out string s1)
+        {
+            s1 = ""hello"";
+        }
+    }
+}").VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void UseOfCapturedVariableAssignedInArgument()
+        {
+            CreateCompilation(@"
+public class C
+{
+    void M()
+    {
+        string s0;
+        local1(s0 = ""hello"", out s0);
+    
+        void local1(string s1, out string s2)
+        {
+               s0.ToString();
+               s2 = ""bye"";
+        }
+    }
+}").VerifyDiagnostics();
         }
     }
 }

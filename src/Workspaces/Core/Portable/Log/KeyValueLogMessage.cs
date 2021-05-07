@@ -1,10 +1,13 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
+
+#nullable disable
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis.PooledObjects;
-using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.Internal.Log
 {
@@ -13,27 +16,29 @@ namespace Microsoft.CodeAnalysis.Internal.Log
     /// </summary>
     internal sealed class KeyValueLogMessage : LogMessage
     {
-        private static readonly ObjectPool<KeyValueLogMessage> s_pool = new ObjectPool<KeyValueLogMessage>(() => new KeyValueLogMessage(), 20);
+        private static readonly ObjectPool<KeyValueLogMessage> s_pool = new(() => new KeyValueLogMessage(), 20);
 
-        public static readonly KeyValueLogMessage NoProperty = new KeyValueLogMessage();
+        public static readonly KeyValueLogMessage NoProperty = new();
 
-        public static KeyValueLogMessage Create(Action<Dictionary<string, object>> propertySetter)
+        /// <summary>
+        /// Creates a <see cref="KeyValueLogMessage"/> with default <see cref="LogLevel.Information"/>, since
+        /// KV Log Messages are by default more informational and should be logged as such. 
+        /// </summary>
+        public static KeyValueLogMessage Create(Action<Dictionary<string, object>> propertySetter, LogLevel logLevel = LogLevel.Information)
         {
             var logMessage = s_pool.Allocate();
-            logMessage.Construct(LogType.Trace, propertySetter);
+            logMessage.Construct(LogType.Trace, propertySetter, logLevel);
 
             return logMessage;
         }
 
-        public static KeyValueLogMessage Create(LogType kind)
-        {
-            return Create(kind, propertySetter: null);
-        }
+        public static KeyValueLogMessage Create(LogType kind, LogLevel logLevel = LogLevel.Information)
+            => Create(kind, propertySetter: null, logLevel);
 
-        public static KeyValueLogMessage Create(LogType kind, Action<Dictionary<string, object>> propertySetter)
+        public static KeyValueLogMessage Create(LogType kind, Action<Dictionary<string, object>> propertySetter, LogLevel logLevel = LogLevel.Information)
         {
             var logMessage = s_pool.Allocate();
-            logMessage.Construct(kind, propertySetter);
+            logMessage.Construct(kind, propertySetter, logLevel);
 
             return logMessage;
         }
@@ -48,10 +53,11 @@ namespace Microsoft.CodeAnalysis.Internal.Log
             _kind = LogType.Trace;
         }
 
-        private void Construct(LogType kind, Action<Dictionary<string, object>> propertySetter)
+        private void Construct(LogType kind, Action<Dictionary<string, object>> propertySetter, LogLevel logLevel)
         {
             _kind = kind;
             _propertySetter = propertySetter;
+            LogLevel = logLevel;
         }
 
         public LogType Kind => _kind;
@@ -61,7 +67,7 @@ namespace Microsoft.CodeAnalysis.Internal.Log
             get
             {
                 EnsureMap();
-                return _map?.Count > 0;
+                return _map.Count > 0;
             }
         }
 
@@ -82,6 +88,11 @@ namespace Microsoft.CodeAnalysis.Internal.Log
 
         protected override void FreeCore()
         {
+            if (this == NoProperty)
+            {
+                return;
+            }
+
             if (_map != null)
             {
                 SharedPools.Default<Dictionary<string, object>>().ClearAndFree(_map);
@@ -91,17 +102,21 @@ namespace Microsoft.CodeAnalysis.Internal.Log
             if (_propertySetter != null)
             {
                 _propertySetter = null;
-                s_pool.Free(this);
             }
+
+            // always pool it back
+            s_pool.Free(this);
         }
 
         private void EnsureMap()
         {
-            if (_map == null && _propertySetter != null)
+            // always create _map
+            if (_map == null)
             {
                 _map = SharedPools.Default<Dictionary<string, object>>().AllocateAndClear();
-                _propertySetter(_map);
             }
+
+            _propertySetter?.Invoke(_map);
         }
     }
 

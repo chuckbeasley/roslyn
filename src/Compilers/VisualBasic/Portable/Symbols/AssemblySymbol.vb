@@ -1,4 +1,6 @@
-﻿' Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿' Licensed to the .NET Foundation under one or more agreements.
+' The .NET Foundation licenses this file to you under the MIT license.
+' See the LICENSE file in the project root for more information.
 
 Imports System.Collections.Concurrent
 Imports System.Collections.Generic
@@ -9,6 +11,7 @@ Imports Microsoft.CodeAnalysis.VisualBasic.Symbols
 Imports Microsoft.CodeAnalysis.VisualBasic.Syntax
 Imports Microsoft.CodeAnalysis.Collections
 Imports System.Runtime.InteropServices
+Imports Microsoft.CodeAnalysis.Symbols
 
 Namespace Microsoft.CodeAnalysis.VisualBasic.Symbols
 
@@ -17,7 +20,7 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Symbols
     ''' </summary>
     Friend MustInherit Class AssemblySymbol
         Inherits Symbol
-        Implements IAssemblySymbolInternal
+        Implements IAssemblySymbol, IAssemblySymbolInternal
 
         ' !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         ' Changes to the public interface of this class should remain synchronized with the C# version of Symbol.
@@ -43,6 +46,12 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Symbols
         Friend ReadOnly Property CorLibrary As AssemblySymbol
             Get
                 Return _corLibrary
+            End Get
+        End Property
+
+        Private ReadOnly Property IAssemblySymbolInternal_CorLibrary As IAssemblySymbolInternal Implements IAssemblySymbolInternal.CorLibrary
+            Get
+                Return CorLibrary
             End Get
         End Property
 
@@ -82,14 +91,14 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Symbols
         ''' <summary>
         ''' If this symbol represents a metadata assembly returns the underlying <see cref="AssemblyMetadata"/>.
         ''' 
-        ''' Otherwise, this returns <code>nothing</code>.
+        ''' Otherwise, this returns <see langword="Nothing"/>.
         ''' </summary>
         Public MustOverride Function GetMetadata() As AssemblyMetadata Implements IAssemblySymbol.GetMetadata
 
         ''' <summary>
         ''' Get the name of this assembly.
         ''' </summary>
-        Public MustOverride ReadOnly Property Identity As AssemblyIdentity Implements IAssemblySymbol.Identity
+        Public MustOverride ReadOnly Property Identity As AssemblyIdentity Implements IAssemblySymbol.Identity, IAssemblySymbolInternal.Identity
 
         Public MustOverride ReadOnly Property AssemblyVersionPattern As Version Implements IAssemblySymbolInternal.AssemblyVersionPattern
 
@@ -307,6 +316,8 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Symbols
             Return New MissingMetadataTypeSymbol.TopLevelWithCustomErrorInfo(forwardingModule, emittedName, diagnosticInfo)
         End Function
 
+        Friend MustOverride Function GetAllTopLevelForwardedTypes() As IEnumerable(Of NamedTypeSymbol)
+
         ''' <summary>
         ''' Lookup declaration for predefined CorLib type in this Assembly. Only valid if this 
         ''' assembly is the Cor Library
@@ -333,6 +344,23 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Symbols
                 Throw ExceptionUtilities.Unreachable
             End Get
         End Property
+
+        ''' <summary>
+        ''' Figure out if the target runtime supports default interface implementation.
+        ''' </summary>
+        Friend ReadOnly Property RuntimeSupportsDefaultInterfaceImplementation As Boolean
+            Get
+                Return RuntimeSupportsFeature(SpecialMember.System_Runtime_CompilerServices_RuntimeFeature__DefaultImplementationsOfInterfaces)
+            End Get
+        End Property
+
+        Private Function RuntimeSupportsFeature(feature As SpecialMember) As Boolean
+            Debug.Assert(SpecialMembers.GetDescriptor(feature).DeclaringTypeId = SpecialType.System_Runtime_CompilerServices_RuntimeFeature)
+
+            Dim runtimeFeature = GetSpecialType(SpecialType.System_Runtime_CompilerServices_RuntimeFeature)
+            Return runtimeFeature.IsClassType() AndAlso runtimeFeature.IsMetadataAbstract AndAlso runtimeFeature.IsMetadataSealed AndAlso
+                   GetSpecialTypeMember(feature) IsNot Nothing
+        End Function
 
         ''' <summary>
         ''' Return an array of assemblies involved in canonical type resolution of
@@ -506,53 +534,80 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Symbols
                 result = Nothing
             End If
 
-            If (IsAcceptableMatchForGetTypeByNameAndArity(result)) Then
+            If IsAcceptableMatchForGetTypeByNameAndArity(result) Then
                 Return result
             End If
 
             result = Nothing
 
-            If includeReferences Then
-                ' Lookup in references
-                Dim references As ImmutableArray(Of AssemblySymbol) = Me.Modules(0).GetReferencedAssemblySymbols()
-
-                For i As Integer = 0 To references.Length - 1 Step 1
-                    Debug.Assert(Not (TypeOf Me Is SourceAssemblySymbol AndAlso references(i).IsMissing)) ' Non-source assemblies can have missing references
-                    Dim candidate As NamedTypeSymbol = references(i).LookupTopLevelMetadataType(metadataName, digThroughForwardedTypes:=False)
-
-                    If isWellKnownType AndAlso Not IsValidWellKnownType(candidate) Then
-                        candidate = Nothing
-                    End If
-
-                    If IsAcceptableMatchForGetTypeByNameAndArity(candidate) AndAlso
-                        Not candidate.IsHiddenByVisualBasicEmbeddedAttribute() AndAlso
-                        Not candidate.IsHiddenByCodeAnalysisEmbeddedAttribute() AndAlso
-                        candidate <> result Then
-
-                        If (result IsNot Nothing) Then
-                            ' Ambiguity
-                            If ignoreCorLibraryDuplicatedTypes Then
-                                If IsInCorLib(candidate) Then
-                                    ' ignore candidate
-                                    Continue For
-                                End If
-                                If IsInCorLib(result) Then
-                                    ' drop previous result
-                                    result = candidate
-                                    Continue For
-                                End If
-                            End If
-
-                            conflicts = (result.ContainingAssembly, candidate.ContainingAssembly)
-                            Return Nothing
-                        End If
-
-                        result = candidate
-                    End If
-                Next
+            If Not includeReferences Then
+                Return result
             End If
 
+            ' Then try corlib, when finding a result there means we've found the final result
+            Dim skipCorLibrary = False
+
+            If CorLibrary IsNot Me AndAlso
+                Not CorLibrary.IsMissing AndAlso
+                Not ignoreCorLibraryDuplicatedTypes Then
+
+                Dim corLibCandidate As NamedTypeSymbol = CorLibrary.LookupTopLevelMetadataType(metadataName, digThroughForwardedTypes:=False)
+                skipCorLibrary = True
+
+                If IsValidCandidate(corLibCandidate, isWellKnownType) Then
+                    Return corLibCandidate
+                End If
+            End If
+
+            ' Lookup in references
+            Dim references As ImmutableArray(Of AssemblySymbol) = Me.Modules(0).GetReferencedAssemblySymbols()
+
+            For i As Integer = 0 To references.Length - 1 Step 1
+                Debug.Assert(Not (TypeOf Me Is SourceAssemblySymbol AndAlso references(i).IsMissing)) ' Non-source assemblies can have missing references
+                Dim reference = references(i)
+
+                If skipCorLibrary AndAlso reference Is CorLibrary Then
+                    Continue For
+                End If
+
+                Dim candidate As NamedTypeSymbol = reference.LookupTopLevelMetadataType(metadataName, digThroughForwardedTypes:=False)
+
+                If Not IsValidCandidate(candidate, isWellKnownType) OrElse
+                        TypeSymbol.Equals(candidate, result, TypeCompareKind.ConsiderEverything) Then
+
+                    Continue For
+                End If
+
+                If result IsNot Nothing Then
+                    ' Ambiguity
+                    If ignoreCorLibraryDuplicatedTypes Then
+                        If IsInCorLib(candidate) Then
+                            ' ignore candidate
+                            Continue For
+                        End If
+                        If IsInCorLib(result) Then
+                            ' drop previous result
+                            result = candidate
+                            Continue For
+                        End If
+                    End If
+
+                    conflicts = (result.ContainingAssembly, candidate.ContainingAssembly)
+                    Return Nothing
+                End If
+
+                result = candidate
+            Next
+
             Return result
+        End Function
+
+        Private Function IsValidCandidate(candidate As NamedTypeSymbol, isWellKnownType As Boolean) As Boolean
+
+            Return (Not isWellKnownType OrElse IsValidWellKnownType(candidate)) AndAlso
+                IsAcceptableMatchForGetTypeByNameAndArity(candidate) AndAlso
+                Not candidate.IsHiddenByVisualBasicEmbeddedAttribute() AndAlso
+                Not candidate.IsHiddenByCodeAnalysisEmbeddedAttribute()
         End Function
 
         Private Function IsInCorLib(type As NamedTypeSymbol) As Boolean
@@ -576,48 +631,6 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Symbols
 
         Friend MustOverride ReadOnly Property PublicKey As ImmutableArray(Of Byte)
 
-        Protected Enum IVTConclusion
-            Match
-            OneSignedOneNot
-            PublicKeyDoesntMatch
-            NoRelationshipClaimed
-        End Enum
-
-        Protected Function PerformIVTCheck(key As ImmutableArray(Of Byte), otherIdentity As AssemblyIdentity) As IVTConclusion
-            ' Implementation of this function in C# compiler is somewhat different, but we believe
-            ' that the difference doesn't affect any real world scenarios that we know/care about.
-            ' At the moment we don't feel it is worth porting the logic, but we might reconsider in the future. 
-
-            ' We also have an easy out here. Suppose Smith names Jones as a friend, And Jones Is 
-            ' being compiled as a module, Not as an assembly. You can only strong-name an assembly. So if this module
-            ' Is named Jones, And Smith Is extending friend access to Jones, then we are going to optimistically 
-            ' assume that Jones Is going to be compiled into an assembly with a matching strong name, if necessary.
-            Dim compilation As Compilation = Me.DeclaringCompilation
-            If compilation IsNot Nothing AndAlso compilation.Options.OutputKind.IsNetModule() Then
-                Return IVTConclusion.Match
-            End If
-
-            Dim result As IVTConclusion
-
-            If Me.PublicKey.IsDefaultOrEmpty OrElse key.IsDefaultOrEmpty Then
-                If Me.PublicKey.IsDefaultOrEmpty AndAlso key.IsDefaultOrEmpty Then
-                    'we are not signed, therefore the other assembly shouldn't be signed
-                    result = If(otherIdentity.IsStrongName, IVTConclusion.OneSignedOneNot, IVTConclusion.Match)
-                ElseIf Me.PublicKey.IsDefaultOrEmpty Then
-                    result = IVTConclusion.PublicKeyDoesntMatch
-                Else
-                    ' key is NullOrEmpty, Me.PublicKey is not.
-                    result = IVTConclusion.NoRelationshipClaimed
-                End If
-            ElseIf ByteSequenceComparer.Equals(key, Me.PublicKey) Then
-                result = If(otherIdentity.IsStrongName, IVTConclusion.Match, IVTConclusion.OneSignedOneNot)
-            Else
-                result = IVTConclusion.PublicKeyDoesntMatch
-            End If
-
-            Return result
-        End Function
-
         Friend Function IsValidWellKnownType(result As NamedTypeSymbol) As Boolean
             If result Is Nothing OrElse result.TypeKind = TypeKind.Error Then
                 Return False
@@ -637,19 +650,25 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Symbols
             End Get
         End Property
 
-        Private Function IAssemblySymbol_GivesAccessTo(toAssembly As IAssemblySymbol) As Boolean Implements IAssemblySymbol.GivesAccessTo
-            If Equals(Me, toAssembly) Then
+        Private Function IAssemblySymbol_GivesAccessTo(assemblyWantingAccess As IAssemblySymbol) As Boolean Implements IAssemblySymbol.GivesAccessTo
+            If Equals(Me, assemblyWantingAccess) Then
                 Return True
             End If
 
-            Dim assembly = TryCast(toAssembly, AssemblySymbol)
-            If assembly Is Nothing Then
-                Return False
+            Dim myKeys = Me.GetInternalsVisibleToPublicKeys(assemblyWantingAccess.Name)
+
+            ' We have an easy out here. Suppose the assembly wanting access is
+            ' being compiled as a module. You can only strong-name an assembly. So we are going to optimistically
+            ' assume that it Is going to be compiled into an assembly with a matching strong name, if necessary
+            If myKeys.Any() AndAlso assemblyWantingAccess.IsNetModule() Then
+                Return True
             End If
 
-            Dim myKeys = Me.GetInternalsVisibleToPublicKeys(assembly.Identity.Name)
             For Each key In myKeys
-                If assembly.PerformIVTCheck(key, Me.Identity) = IVTConclusion.Match Then
+                Dim conclusion As IVTConclusion = Me.Identity.PerformIVTCheck(assemblyWantingAccess.Identity.PublicKey, key)
+                Debug.Assert(conclusion <> IVTConclusion.NoRelationshipClaimed)
+                If conclusion = IVTConclusion.Match Then
+                    ' Note that C# includes  OrElse conclusion = IVTConclusion.OneSignedOneNot
                     Return True
                 End If
             Next
@@ -665,6 +684,10 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Symbols
 
         Private Function IAssemblySymbol_ResolveForwardedType(metadataName As String) As INamedTypeSymbol Implements IAssemblySymbol.ResolveForwardedType
             Return Me.ResolveForwardedType(metadataName)
+        End Function
+
+        Private Function IAssemblySymbol_GetForwardedTypes() As ImmutableArray(Of INamedTypeSymbol) Implements IAssemblySymbol.GetForwardedTypes
+            Return ImmutableArrayExtensions.AsImmutable(Of INamedTypeSymbol)(GetAllTopLevelForwardedTypes().OrderBy(Function(t) t.ToDisplayString(SymbolDisplayFormat.QualifiedNameArityFormat)))
         End Function
 
         Private Function IAssemblySymbol_GetTypeByMetadataName(metadataName As String) As INamedTypeSymbol Implements IAssemblySymbol.GetTypeByMetadataName

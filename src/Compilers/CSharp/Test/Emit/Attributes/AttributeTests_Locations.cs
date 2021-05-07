@@ -1,4 +1,8 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
+
+#nullable disable
 
 using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -25,7 +29,7 @@ using System;
 public class A : Attribute { }
 ";
 
-            CreateStandardCompilation(new[] { source1, source2 }).VerifyDiagnostics();
+            CreateCompilation(new[] { source1, source2 }).VerifyDiagnostics();
         }
 
         [Fact]
@@ -44,7 +48,7 @@ using System;
 public class A : Attribute { }
 ";
 
-            CreateStandardCompilation(new[] { source1, source2 }).VerifyDiagnostics(
+            CreateCompilation(new[] { source1, source2 }).VerifyDiagnostics(
                 // (4,6): error CS1730: Assembly and module attributes must precede all other elements defined in a file except using clauses and extern alias declarations
                 Diagnostic(ErrorCode.ERR_GlobalAttributesNotFirst, "assembly"));
         }
@@ -65,7 +69,7 @@ using System;
 public class A : Attribute { }
 ";
 
-            CreateStandardCompilation(new[] { source1, source2 }).VerifyDiagnostics(
+            CreateCompilation(new[] { source1, source2 }).VerifyDiagnostics(
                 // (5,1): error CS1519: Unexpected token '}', member declaration expected.
                 Diagnostic(ErrorCode.ERR_InvalidMemberDecl, "}").WithArguments("}"));
         }
@@ -95,7 +99,7 @@ class C
 {
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (8,2): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "type"),
                 // (9,2): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
@@ -143,7 +147,103 @@ struct S
 {
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
+                // (8,2): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "type"),
+                // (9,2): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "module").WithArguments("module", "type"),
+                // (11,2): warning CS0657: 'method' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "method").WithArguments("method", "type"),
+                // (12,2): warning CS0657: 'field' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "field").WithArguments("field", "type"),
+                // (13,2): warning CS0657: 'property' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "property").WithArguments("property", "type"),
+                // (14,2): warning CS0657: 'event' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "event").WithArguments("event", "type"),
+                // (15,2): warning CS0657: 'return' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "return").WithArguments("return", "type"),
+                // (16,2): warning CS0657: 'param' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "param").WithArguments("param", "type"),
+                // (17,2): warning CS0657: 'typevar' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "typevar").WithArguments("typevar", "type"),
+                // (18,2): warning CS0658: 'delegate' is not a recognized attribute location. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_InvalidAttributeLocation, "delegate").WithArguments("delegate", "type"));
+        }
+
+        [Fact]
+        public void OnRecordStruct()
+        {
+            var source = @"
+using System;
+
+[AttributeUsage(AttributeTargets.All, AllowMultiple = true)]
+public class A : Attribute { }
+
+[A]
+[assembly: A]
+[module: A]
+[type: A]
+[method: A]
+[field: A]
+[property: A]
+[event: A]
+[return: A]
+[param: A]
+[typevar: A]
+[delegate: A]
+record struct S
+{
+}
+";
+            CreateCompilation(source, parseOptions: TestOptions.RegularPreview).VerifyDiagnostics(
+                // (8,2): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "type"),
+                // (9,2): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "module").WithArguments("module", "type"),
+                // (11,2): warning CS0657: 'method' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "method").WithArguments("method", "type"),
+                // (12,2): warning CS0657: 'field' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "field").WithArguments("field", "type"),
+                // (13,2): warning CS0657: 'property' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "property").WithArguments("property", "type"),
+                // (14,2): warning CS0657: 'event' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "event").WithArguments("event", "type"),
+                // (15,2): warning CS0657: 'return' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "return").WithArguments("return", "type"),
+                // (16,2): warning CS0657: 'param' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "param").WithArguments("param", "type"),
+                // (17,2): warning CS0657: 'typevar' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "typevar").WithArguments("typevar", "type"),
+                // (18,2): warning CS0658: 'delegate' is not a recognized attribute location. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_InvalidAttributeLocation, "delegate").WithArguments("delegate", "type"));
+        }
+
+        [Fact]
+        public void OnRecordClass()
+        {
+            var source = @"
+using System;
+
+[AttributeUsage(AttributeTargets.All, AllowMultiple = true)]
+public class A : Attribute { }
+
+[A]
+[assembly: A]
+[module: A]
+[type: A]
+[method: A]
+[field: A]
+[property: A]
+[event: A]
+[return: A]
+[param: A]
+[typevar: A]
+[delegate: A]
+record class S
+{
+}
+";
+            CreateCompilation(source, parseOptions: TestOptions.RegularPreview).VerifyDiagnostics(
                 // (8,2): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "type"),
                 // (9,2): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
@@ -191,7 +291,7 @@ enum E
 {
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (8,2): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "type"),
                 // (9,2): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
@@ -239,7 +339,7 @@ interface I
 {
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (8,2): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "type"),
                 // (9,2): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
@@ -285,7 +385,7 @@ public class A : Attribute { }
 [delegate: A]
 delegate void D(int a);
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (8,2): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type, return'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "type, return"),
                 // (9,2): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'type, return'. All attributes in this block will be ignored.
@@ -332,7 +432,7 @@ class C
     void M(int a) { }
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (10,6): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, return'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "method, return"),
                 // (11,6): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, return'. All attributes in this block will be ignored.
@@ -379,7 +479,7 @@ class C
     int a;
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (10,6): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "field"),
                 // (11,6): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field'. All attributes in this block will be ignored.
@@ -430,7 +530,7 @@ enum E
     x
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (10,6): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "field"),
                 // (11,6): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field'. All attributes in this block will be ignored.
@@ -479,27 +579,25 @@ class C
     int a { get; set; }
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
-                // (10,6): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'property'. All attributes in this block will be ignored.
-                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "property"),
-                // (11,6): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'property'. All attributes in this block will be ignored.
-                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "module").WithArguments("module", "property"),
-                // (12,6): warning CS0657: 'type' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'property'. All attributes in this block will be ignored.
-                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "type").WithArguments("type", "property"),
-                // (13,6): warning CS0657: 'method' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'property'. All attributes in this block will be ignored.
-                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "method").WithArguments("method", "property"),
-                // (14,6): warning CS0657: 'field' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'property'. All attributes in this block will be ignored.
-                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "field").WithArguments("field", "property"),
-                // (16,6): warning CS0657: 'event' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'property'. All attributes in this block will be ignored.
-                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "event").WithArguments("event", "property"),
-                // (17,6): warning CS0657: 'return' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'property'. All attributes in this block will be ignored.
-                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "return").WithArguments("return", "property"),
-                // (18,6): warning CS0657: 'param' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'property'. All attributes in this block will be ignored.
-                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "param").WithArguments("param", "property"),
-                // (19,6): warning CS0657: 'typevar' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'property'. All attributes in this block will be ignored.
-                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "typevar").WithArguments("typevar", "property"),
-                // (20,6): warning CS0658: 'delegate' is not a recognized attribute location. Valid attribute locations for this declaration are 'property'. All attributes in this block will be ignored.
-                Diagnostic(ErrorCode.WRN_InvalidAttributeLocation, "delegate").WithArguments("delegate", "property"));
+            CreateCompilationWithMscorlib40(source).VerifyDiagnostics(
+                // (10,6): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field, property'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "field, property").WithLocation(10, 6),
+                // (11,6): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field, property'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "module").WithArguments("module", "field, property").WithLocation(11, 6),
+                // (12,6): warning CS0657: 'type' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field, property'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "type").WithArguments("type", "field, property").WithLocation(12, 6),
+                // (13,6): warning CS0657: 'method' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field, property'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "method").WithArguments("method", "field, property").WithLocation(13, 6),
+                // (16,6): warning CS0657: 'event' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field, property'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "event").WithArguments("event", "field, property").WithLocation(16, 6),
+                // (17,6): warning CS0657: 'return' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field, property'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "return").WithArguments("return", "field, property").WithLocation(17, 6),
+                // (18,6): warning CS0657: 'param' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field, property'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "param").WithArguments("param", "field, property").WithLocation(18, 6),
+                // (19,6): warning CS0657: 'typevar' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'field, property'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "typevar").WithArguments("typevar", "field, property").WithLocation(19, 6),
+                // (20,6): warning CS0658: 'delegate' is not a recognized attribute location. Valid attribute locations for this declaration are 'field, property'. All attributes in this block will be ignored.
+                Diagnostic(ErrorCode.WRN_InvalidAttributeLocation, "delegate").WithArguments("delegate", "field, property").WithLocation(20, 6));
         }
 
         [Fact]
@@ -533,7 +631,7 @@ class C
     }
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (12,10): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, return'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "method, return"),
                 // (13,10): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, return'. All attributes in this block will be ignored.
@@ -585,7 +683,7 @@ class C
     }
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (14,10): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, param, return'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "method, param, return"),
                 // (15,10): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, param, return'. All attributes in this block will be ignored.
@@ -630,7 +728,7 @@ class C
     event System.Action e;
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (10,6): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, field, event'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "method, field, event"),
                 // (11,6): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, field, event'. All attributes in this block will be ignored.
@@ -677,7 +775,7 @@ interface I
     event System.Action e;
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (10,6): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, event'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "method, event"),
                 // (11,6): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, event'. All attributes in this block will be ignored.
@@ -724,7 +822,7 @@ class C
     event Action E { add { } remove { } }
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (10,6): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'event'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "event"),
                 // (11,6): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'event'. All attributes in this block will be ignored.
@@ -778,7 +876,7 @@ class C
     }
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (12,10): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, param, return'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "method, param, return"),
                 // (13,10): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, param, return'. All attributes in this block will be ignored.
@@ -828,7 +926,7 @@ class C
     }
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (14,10): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, param, return'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "method, param, return"),
                 // (15,10): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'method, param, return'. All attributes in this block will be ignored.
@@ -875,7 +973,7 @@ class C
 {
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (10,6): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'typevar'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "typevar"),
                 // (11,6): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'typevar'. All attributes in this block will be ignored.
@@ -926,7 +1024,7 @@ class C
     ) { }
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (11,10): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'param'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "param"),
                 // (12,10): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'param'. All attributes in this block will be ignored.
@@ -974,7 +1072,7 @@ delegate void D(
     int x
 );
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (9,6): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'param'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "param"),
                 // (10,6): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'param'. All attributes in this block will be ignored.
@@ -1028,7 +1126,7 @@ class C
     }
 }
 ";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (11,10): warning CS0657: 'assembly' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'param'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_AttributeLocationOnBadDeclaration, "assembly").WithArguments("assembly", "param"),
                 // (12,10): warning CS0657: 'module' is not a valid attribute location for this declaration. Valid attribute locations for this declaration are 'param'. All attributes in this block will be ignored.
@@ -1072,7 +1170,7 @@ public class A : Attribute { }
 class C
 {
 }";
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (7,2): warning CS0658: 'class' is not a recognized attribute location. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
                 Diagnostic(ErrorCode.WRN_InvalidAttributeLocation, "class").WithArguments("class", "type"),
                 // (8,2): warning CS0658: 'struct' is not a recognized attribute location. Valid attribute locations for this declaration are 'type'. All attributes in this block will be ignored.
@@ -1128,7 +1226,7 @@ public class A : Attribute { }
         [Fact]
         public void CS0246ERR_SingleTypeNameNotFound_VerbatimIdentifierAttributeTarget()
         {
-            CreateStandardCompilation(@"class A { [@return:X] void B() { } }").VerifyDiagnostics(
+            CreateCompilation(@"class A { [@return:X] void B() { } }").VerifyDiagnostics(
                 // (1,20): error CS0246: The type or namespace name 'XAttribute' could not be found (are you missing a using directive or an assembly reference?)
                 // class A { [@return:X] void B() { } }
                 Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "X").WithArguments("XAttribute").WithLocation(1, 20),
@@ -1153,7 +1251,7 @@ class C { [return:@X] void M() { } }  // Fine, binds to X
 class D { [@return:@X] void M() { } }  // Fine, binds to X
 ";
 
-            CreateStandardCompilation(source).VerifyDiagnostics(
+            CreateCompilation(source).VerifyDiagnostics(
                 // (7,19): error CS1614: 'X' is ambiguous between 'X' and 'XAttribute'; use either '@X' or 'XAttribute'
                 // class A { [return:X] void M() { } }  // Ambiguous
                 Diagnostic(ErrorCode.ERR_AmbiguousAttribute, "X").WithArguments("X", "X", "XAttribute"),

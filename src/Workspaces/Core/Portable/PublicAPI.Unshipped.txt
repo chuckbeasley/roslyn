@@ -1,13 +1,19 @@
-Microsoft.CodeAnalysis.Editing.DeclarationModifiers.IsRef.get -> bool
-Microsoft.CodeAnalysis.Editing.SyntaxGenerator.TupleElementExpression(Microsoft.CodeAnalysis.ITypeSymbol type, string name = null) -> Microsoft.CodeAnalysis.SyntaxNode
-Microsoft.CodeAnalysis.Editing.SyntaxGenerator.TupleTypeExpression(System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.ITypeSymbol> elementTypes, System.Collections.Generic.IEnumerable<string> elementNames = null) -> Microsoft.CodeAnalysis.SyntaxNode
-Microsoft.CodeAnalysis.Editing.SyntaxGenerator.TupleTypeExpression(System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.SyntaxNode> elements) -> Microsoft.CodeAnalysis.SyntaxNode
-Microsoft.CodeAnalysis.Editing.SyntaxGenerator.TupleTypeExpression(params Microsoft.CodeAnalysis.SyntaxNode[] elements) -> Microsoft.CodeAnalysis.SyntaxNode
-Microsoft.CodeAnalysis.Editing.SyntaxGenerator.WithAccessorDeclarations(Microsoft.CodeAnalysis.SyntaxNode declaration, params Microsoft.CodeAnalysis.SyntaxNode[] accessorDeclarations) -> Microsoft.CodeAnalysis.SyntaxNode
-abstract Microsoft.CodeAnalysis.Editing.SyntaxGenerator.GetAccessorDeclaration(Microsoft.CodeAnalysis.Accessibility accessibility = Microsoft.CodeAnalysis.Accessibility.NotApplicable, System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.SyntaxNode> statements = null) -> Microsoft.CodeAnalysis.SyntaxNode
-abstract Microsoft.CodeAnalysis.Editing.SyntaxGenerator.SetAccessorDeclaration(Microsoft.CodeAnalysis.Accessibility accessibility = Microsoft.CodeAnalysis.Accessibility.NotApplicable, System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.SyntaxNode> statements = null) -> Microsoft.CodeAnalysis.SyntaxNode
-abstract Microsoft.CodeAnalysis.Editing.SyntaxGenerator.TupleElementExpression(Microsoft.CodeAnalysis.SyntaxNode type, string name = null) -> Microsoft.CodeAnalysis.SyntaxNode
-abstract Microsoft.CodeAnalysis.Editing.SyntaxGenerator.TupleExpression(System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.SyntaxNode> arguments) -> Microsoft.CodeAnalysis.SyntaxNode
-abstract Microsoft.CodeAnalysis.Editing.SyntaxGenerator.WithAccessorDeclarations(Microsoft.CodeAnalysis.SyntaxNode declaration, System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.SyntaxNode> accessorDeclarations) -> Microsoft.CodeAnalysis.SyntaxNode
-static Microsoft.CodeAnalysis.Editing.DeclarationModifiers.Ref.get -> Microsoft.CodeAnalysis.Editing.DeclarationModifiers
-static Microsoft.CodeAnalysis.Editing.SyntaxEditorExtensions.InsertParameter(this Microsoft.CodeAnalysis.Editing.SyntaxEditor editor, Microsoft.CodeAnalysis.SyntaxNode declaration, int index, Microsoft.CodeAnalysis.SyntaxNode parameter) -> void
+abstract Microsoft.CodeAnalysis.CodeFixes.DocumentBasedFixAllProvider.FixAllAsync(Microsoft.CodeAnalysis.CodeFixes.FixAllContext fixAllContext, Microsoft.CodeAnalysis.Document document, System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.Diagnostic> diagnostics) -> System.Threading.Tasks.Task<Microsoft.CodeAnalysis.Document>
+const Microsoft.CodeAnalysis.Classification.ClassificationTypeNames.RecordClassName = "record class name" -> string
+const Microsoft.CodeAnalysis.Classification.ClassificationTypeNames.RecordStructName = "record struct name" -> string
+Microsoft.CodeAnalysis.CodeFixes.DocumentBasedFixAllProvider
+Microsoft.CodeAnalysis.CodeFixes.DocumentBasedFixAllProvider.DocumentBasedFixAllProvider() -> void
+Microsoft.CodeAnalysis.CommandLineProject
+Microsoft.CodeAnalysis.Host.IPersistentStorageService.GetStorageAsync(Microsoft.CodeAnalysis.Solution solution, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.CodeAnalysis.Host.IPersistentStorage>
+Microsoft.CodeAnalysis.Project.GetSourceGeneratedDocumentAsync(Microsoft.CodeAnalysis.DocumentId documentId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.CodeAnalysis.SourceGeneratedDocument>
+Microsoft.CodeAnalysis.Project.GetSourceGeneratedDocumentsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.SourceGeneratedDocument>>
+Microsoft.CodeAnalysis.Editing.DeclarationKind.RecordClass = 29 -> Microsoft.CodeAnalysis.Editing.DeclarationKind
+Microsoft.CodeAnalysis.Solution.GetSourceGeneratedDocumentAsync(Microsoft.CodeAnalysis.DocumentId documentId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<Microsoft.CodeAnalysis.SourceGeneratedDocument>
+Microsoft.CodeAnalysis.SourceGeneratedDocument
+Microsoft.CodeAnalysis.SourceGeneratedDocument.HintName.get -> string
+override sealed Microsoft.CodeAnalysis.CodeFixes.DocumentBasedFixAllProvider.GetFixAsync(Microsoft.CodeAnalysis.CodeFixes.FixAllContext fixAllContext) -> System.Threading.Tasks.Task<Microsoft.CodeAnalysis.CodeActions.CodeAction>
+override sealed Microsoft.CodeAnalysis.CodeFixes.DocumentBasedFixAllProvider.GetSupportedFixAllScopes() -> System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.CodeFixes.FixAllScope>
+static Microsoft.CodeAnalysis.CommandLineProject.CreateProjectInfo(string projectName, string language, string commandLine, string baseDirectory, Microsoft.CodeAnalysis.Workspace workspace = null) -> Microsoft.CodeAnalysis.ProjectInfo
+static Microsoft.CodeAnalysis.CommandLineProject.CreateProjectInfo(string projectName, string language, System.Collections.Generic.IEnumerable<string> commandLineArgs, string projectDirectory, Microsoft.CodeAnalysis.Workspace workspace = null) -> Microsoft.CodeAnalysis.ProjectInfo
+virtual Microsoft.CodeAnalysis.CodeFixes.DocumentBasedFixAllProvider.GetFixAllTitle(Microsoft.CodeAnalysis.CodeFixes.FixAllContext fixAllContext) -> string
+static Microsoft.CodeAnalysis.CodeFixes.FixAllProvider.Create(System.Func<Microsoft.CodeAnalysis.CodeFixes.FixAllContext, Microsoft.CodeAnalysis.Document, System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.Diagnostic>, System.Threading.Tasks.Task<Microsoft.CodeAnalysis.Document>> fixAllAsync) -> Microsoft.CodeAnalysis.CodeFixes.FixAllProvider

@@ -1,4 +1,8 @@
-﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
+
+#nullable disable
 
 using System.Linq;
 using Microsoft.CodeAnalysis.CSharp.Symbols;
@@ -19,7 +23,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests.Declarations
 class X : object {}
 class Y {}
 ";
-            var comp = CreateStandardCompilation(text);
+            var comp = CreateCompilation(text);
             var global = comp.GlobalNamespace;
             var x = global.GetTypeMembers("X", 0).Single();
             Assert.Equal(SymbolKind.NamedType, x.BaseType().Kind);
@@ -36,7 +40,7 @@ class Y {}
 @"
 struct X {}
 ";
-            var comp = CreateStandardCompilation(text);
+            var comp = CreateCompilation(text);
             var global = comp.GlobalNamespace;
             var x = global.GetTypeMembers("X", 0).Single();
             Assert.Equal(SymbolKind.NamedType, x.BaseType().Kind);
@@ -52,7 +56,7 @@ interface X {}
 class Y {}
 class Z {}
 ";
-            var comp = CreateStandardCompilation(text);
+            var comp = CreateCompilation(text);
             var global = comp.GlobalNamespace;
             var x = global.GetTypeMembers("X", 0).Single();
             Assert.Null(x.BaseType());
@@ -73,7 +77,7 @@ namespace System {
   class A : Object {}
 }
 ";
-            var comp = CreateStandardCompilation(text);
+            var comp = CreateCompilation(text);
             var global = comp.GlobalNamespace;
             var system = global.GetMembers("System").Single() as NamespaceSymbol;
             var a = system.GetTypeMembers("A", 0).Single();
@@ -129,7 +133,7 @@ namespace NS
     struct Name5 {}
 }
 ";
-            var compilation = CreateStandardCompilation(new string[] { text1, text2, text3 });
+            var compilation = CreateCompilation(new string[] { text1, text2, text3 });
 
             var ns = (NamespaceSymbol)compilation.GlobalNamespace.GetMembers("NS").Single();
 
@@ -180,7 +184,7 @@ namespace NS
         public int CompareTo(object o) { return 0; }
     }
 ";
-            var compilation = CreateCompilation(text, new[] { MscorlibRef });
+            var compilation = CreateEmptyCompilation(text, new[] { MscorlibRef });
             var srcSym = compilation.GlobalNamespace.GetTypeMembers("BaseTypeSpecifierClass").Single();
 
             var ref2 = TestReferences.SymbolsTests.InheritIComparable;
@@ -196,7 +200,7 @@ namespace NS
             var text = @"
     class FooAttribute : System.Attribute {}
 ";
-            var compilation = CreateCompilation(text, new[] { MscorlibRef });
+            var compilation = CreateEmptyCompilation(text, new[] { MscorlibRef });
             var srcSym = compilation.GlobalNamespace.GetTypeMembers("FooAttribute").Single();
 
             var ref2 = TestReferences.SymbolsTests.InheritIComparable;
@@ -223,7 +227,7 @@ class Test : I1
     }
 }
 ";
-            var compilation = CreateStandardCompilation(text);
+            var compilation = CreateCompilation(text);
             var classC = compilation.GlobalNamespace.GetTypeMembers("Test").Single();
             var srcSym = classC.GetMembers("I1.Method").Single();
 
@@ -242,7 +246,7 @@ class Box<T> {}
 class A : Box<" + keyword + @"> {}
 class B : Box<System." + systemTypeName + @"> {}
 ";
-            var comp = CreateStandardCompilation(text);
+            var comp = CreateCompilation(text);
             var global = comp.GlobalNamespace;
             var a = global.GetTypeMembers("A", 0).Single();
             var b = global.GetTypeMembers("B", 0).Single();
@@ -261,18 +265,18 @@ class B : Box<System." + systemTypeName + @"> {}
         [Fact]
         public void MissingReturnType()
         {
-            var comp1 = CreateStandardCompilation(@"public class C { }",
+            var comp1 = CreateCompilation(@"public class C { }",
                 assemblyName: "C");
 
             var C = MetadataReference.CreateFromImage(comp1.EmitToArray());
 
-            var comp2 = CreateStandardCompilation(@"public class B { public static C GetC() { return new C(); } }",
+            var comp2 = CreateCompilation(@"public class B { public static C GetC() { return new C(); } }",
                 assemblyName: "B",
                 references: new[] { C });
 
             var B = MetadataReference.CreateFromImage(comp2.EmitToArray());
 
-            var comp3 = CreateStandardCompilation(@"public class A { public static void Main() { object o = B.GetC(); } }",
+            var comp3 = CreateCompilation(@"public class A { public static void Main() { object o = B.GetC(); } }",
                 assemblyName: "A",
                 references: new[] { B });
 
