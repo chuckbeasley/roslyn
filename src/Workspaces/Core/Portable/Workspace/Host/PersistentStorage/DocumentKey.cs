@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Runtime.Serialization;
 using Microsoft.CodeAnalysis.Host;
 
-namespace Microsoft.CodeAnalysis.PersistentStorage
+namespace Microsoft.CodeAnalysis.Storage
 {
     /// <summary>
     /// Handle that can be used with <see cref="IChecksummedPersistentStorage"/> to read data for a
@@ -38,7 +38,10 @@ namespace Microsoft.CodeAnalysis.PersistentStorage
         }
 
         public static DocumentKey ToDocumentKey(Document document)
-            => new(ProjectKey.ToProjectKey(document.Project), document.Id, document.FilePath, document.Name);
+            => ToDocumentKey(ProjectKey.ToProjectKey(document.Project), document.State);
+
+        public static DocumentKey ToDocumentKey(ProjectKey projectKey, TextDocumentState state)
+            => new(projectKey, state.Id, state.FilePath, state.Name);
 
         public bool Equals(DocumentKey x, DocumentKey y)
             => x.Id == y.Id;
