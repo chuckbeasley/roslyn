@@ -9,6 +9,7 @@ using Microsoft.CodeAnalysis.CodeRefactorings;
 using Microsoft.CodeAnalysis.CSharp.Test.Utilities;
 using Microsoft.CodeAnalysis.CSharp.Wrapping;
 using Microsoft.CodeAnalysis.Test.Utilities;
+using Roslyn.Test.Utilities;
 using Xunit;
 
 namespace Microsoft.CodeAnalysis.Editor.CSharp.UnitTests.Wrapping
@@ -811,6 +812,22 @@ GetIndentionColumn(30),
         }
 
         [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsWrapping)]
+        [WorkItem(38986, "https://github.com/dotnet/roslyn/issues/38986")]
+        public async Task TestInConstructorWithSyntaxErrorAfter()
+        {
+            await TestInRegularAndScript1Async(
+@"class C {
+    public [||]C(int i, int j) : base(,) {
+    }
+}",
+@"class C {
+    public C(int i,
+             int j) : base(,) {
+    }
+}");
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsWrapping)]
         public async Task TestInIndexer()
         {
             await TestInRegularAndScript1Async(
@@ -959,6 +976,16 @@ GetIndentionColumn(30),
 "record struct R([||]int I, string S) { }",
 @"record struct R(int I,
                 string S) { }", new TestParameters(TestOptions.RegularPreview));
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsWrapping)]
+        [WorkItem(61362, "https://github.com/dotnet/roslyn/issues/61362")]
+        public async Task TestWithMissingParameterList()
+        {
+            await TestMissingAsync(
+@"class C {
+    public void UpsertRecord<T>[||]
+}");
         }
     }
 }

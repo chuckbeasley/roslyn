@@ -270,6 +270,7 @@ class X
                         case ErrorCode.WRN_CallerMemberNamePreferredOverCallerArgumentExpression:
                         case ErrorCode.WRN_CallerArgumentExpressionAttributeHasInvalidParameterName:
                         case ErrorCode.WRN_CallerArgumentExpressionAttributeSelfReferential:
+                        case ErrorCode.WRN_ObsoleteMembersShouldNotBeRequired:
                             Assert.Equal(1, ErrorFacts.GetWarningLevel(errorCode));
                             break;
                         case ErrorCode.WRN_MainIgnored:
@@ -347,6 +348,12 @@ class X
                         case ErrorCode.WRN_InterpolatedStringHandlerArgumentAttributeIgnoredOnLambdaParameters:
                         case ErrorCode.WRN_CompileTimeCheckedOverflow:
                         case ErrorCode.WRN_MethGrpToNonDel:
+                        case ErrorCode.WRN_UnassignedThisAutoPropertySupportedVersion:
+                        case ErrorCode.WRN_UnassignedThisSupportedVersion:
+                        case ErrorCode.WRN_UseDefViolationPropertySupportedVersion:
+                        case ErrorCode.WRN_UseDefViolationFieldSupportedVersion:
+                        case ErrorCode.WRN_UseDefViolationThisSupportedVersion:
+                        case ErrorCode.WRN_AnalyzerReferencesNewerCompiler:
                             Assert.Equal(1, ErrorFacts.GetWarningLevel(errorCode));
                             break;
                         case ErrorCode.WRN_InvalidVersionFormat:
@@ -355,12 +362,14 @@ class X
                         case ErrorCode.WRN_NubExprIsConstBool2:
                         case ErrorCode.WRN_StaticInAsOrIs:
                         case ErrorCode.WRN_PrecedenceInversion:
-                        case ErrorCode.WRN_UnassignedThisAutoProperty:
-                        case ErrorCode.WRN_UnassignedThis:
+                        case ErrorCode.WRN_UnassignedThisAutoPropertyUnsupportedVersion:
+                        case ErrorCode.WRN_UnassignedThisUnsupportedVersion:
                         case ErrorCode.WRN_ParamUnassigned:
                         case ErrorCode.WRN_UseDefViolationProperty:
                         case ErrorCode.WRN_UseDefViolationField:
-                        case ErrorCode.WRN_UseDefViolationThis:
+                        case ErrorCode.WRN_UseDefViolationPropertyUnsupportedVersion:
+                        case ErrorCode.WRN_UseDefViolationFieldUnsupportedVersion:
+                        case ErrorCode.WRN_UseDefViolationThisUnsupportedVersion:
                         case ErrorCode.WRN_UseDefViolationOut:
                         case ErrorCode.WRN_UseDefViolation:
                         case ErrorCode.WRN_SyncAndAsyncEntryPoints:
@@ -372,6 +381,10 @@ class X
                         case ErrorCode.WRN_PartialMethodTypeDifference:
                             // These are the warnings introduced with the warning "wave" shipped with dotnet 6 and C# 10.
                             Assert.Equal(6, ErrorFacts.GetWarningLevel(errorCode));
+                            break;
+                        case ErrorCode.WRN_LowerCaseTypeName:
+                            // These are the warnings introduced with the warning "wave" shipped with dotnet 7 and C# 11.
+                            Assert.Equal(7, ErrorFacts.GetWarningLevel(errorCode));
                             break;
                         default:
                             // If a new warning is added, this test will fail
@@ -417,12 +430,12 @@ class X
                     ErrorCode.WRN_ConstOutOfRangeChecked,
                     ErrorCode.WRN_SwitchExpressionNotExhaustiveWithWhen,
                     ErrorCode.WRN_PrecedenceInversion,
-                    ErrorCode.WRN_UnassignedThisAutoProperty,
-                    ErrorCode.WRN_UnassignedThis,
+                    ErrorCode.WRN_UnassignedThisAutoPropertyUnsupportedVersion,
+                    ErrorCode.WRN_UnassignedThisUnsupportedVersion,
                     ErrorCode.WRN_ParamUnassigned,
                     ErrorCode.WRN_UseDefViolationProperty,
                     ErrorCode.WRN_UseDefViolationField,
-                    ErrorCode.WRN_UseDefViolationThis,
+                    ErrorCode.WRN_UseDefViolationThisUnsupportedVersion,
                     ErrorCode.WRN_UseDefViolationOut,
                     ErrorCode.WRN_UseDefViolation,
                     ErrorCode.WRN_SyncAndAsyncEntryPoints,
@@ -2671,7 +2684,7 @@ class Program
             }
         }
 
-        internal class MockMessageProvider : TestMessageProvider
+        internal sealed class MockMessageProvider : TestMessageProvider
         {
             public override DiagnosticSeverity GetSeverity(int code)
             {
@@ -2748,6 +2761,15 @@ class Program
             {
                 return MessageProvider.Instance.GetErrorDisplayString(symbol);
             }
+
+            public override bool GetIsEnabledByDefault(int code)
+            {
+                return true;
+            }
+
+#if DEBUG
+            internal override bool ShouldAssertExpectedMessageArgumentsLength(int errorCode) => false;
+#endif
         }
 
         #endregion
@@ -2812,5 +2834,58 @@ class Program
             Assert.Equal(new KeyValuePair<string, string>("/temp/", "/bar/"), doublemap[1]);
         }
         #endregion
+
+        [Fact]
+        public void TestIsBuildOnlyDiagnostic()
+        {
+            foreach (ErrorCode errorCode in Enum.GetValues(typeof(ErrorCode)))
+            {
+                // ErrorFacts.IsBuildOnlyDiagnostic with throw if any new ErrorCode
+                // is added but not explicitly handled within it.
+                // Update ErrorFacts.IsBuildOnlyDiagnostic if the below call throws.
+                var isBuildOnly = ErrorFacts.IsBuildOnlyDiagnostic(errorCode);
+
+                switch (errorCode)
+                {
+                    case ErrorCode.WRN_ALinkWarn:
+                    case ErrorCode.WRN_UnreferencedField:
+                    case ErrorCode.WRN_UnreferencedFieldAssg:
+                    case ErrorCode.WRN_UnreferencedEvent:
+                    case ErrorCode.WRN_UnassignedInternalField:
+                    case ErrorCode.ERR_MissingPredefinedMember:
+                    case ErrorCode.ERR_PredefinedTypeNotFound:
+                    case ErrorCode.ERR_NoEntryPoint:
+                    case ErrorCode.WRN_InvalidMainSig:
+                    case ErrorCode.ERR_MultipleEntryPoints:
+                    case ErrorCode.WRN_MainIgnored:
+                    case ErrorCode.ERR_MainClassNotClass:
+                    case ErrorCode.WRN_MainCantBeGeneric:
+                    case ErrorCode.ERR_NoMainInClass:
+                    case ErrorCode.ERR_MainClassNotFound:
+                    case ErrorCode.WRN_SyncAndAsyncEntryPoints:
+                    case ErrorCode.ERR_BadDelegateConstructor:
+                    case ErrorCode.ERR_InsufficientStack:
+                    case ErrorCode.ERR_ModuleEmitFailure:
+                    case ErrorCode.ERR_TooManyLocals:
+                    case ErrorCode.ERR_BindToBogus:
+                    case ErrorCode.ERR_ExportedTypeConflictsWithDeclaration:
+                    case ErrorCode.ERR_ForwardedTypeConflictsWithDeclaration:
+                    case ErrorCode.ERR_ExportedTypesConflict:
+                    case ErrorCode.ERR_ForwardedTypeConflictsWithExportedType:
+                    case ErrorCode.ERR_ByRefTypeAndAwait:
+                    case ErrorCode.ERR_RefReturningCallAndAwait:
+                    case ErrorCode.ERR_SpecialByRefInLambda:
+                    case ErrorCode.ERR_DynamicRequiredTypesMissing:
+                    case ErrorCode.ERR_EncUpdateFailedDelegateTypeChanged:
+                    case ErrorCode.ERR_CannotBeConvertedToUtf8:
+                        Assert.True(isBuildOnly, $"Check failed for ErrorCode.{errorCode}");
+                        break;
+
+                    default:
+                        Assert.False(isBuildOnly, $"Check failed for ErrorCode.{errorCode}");
+                        break;
+                }
+            }
+        }
     }
 }

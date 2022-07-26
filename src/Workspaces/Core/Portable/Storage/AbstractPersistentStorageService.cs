@@ -41,12 +41,11 @@ namespace Microsoft.CodeAnalysis.Storage
         protected abstract ValueTask<IChecksummedPersistentStorage?> TryOpenDatabaseAsync(SolutionKey solutionKey, string workingFolderPath, string databaseFilePath, CancellationToken cancellationToken);
         protected abstract bool ShouldDeleteDatabase(Exception exception);
 
-        public ValueTask<IChecksummedPersistentStorage> GetStorageAsync(SolutionKey solutionKey, bool checkBranchId, CancellationToken cancellationToken)
+        public ValueTask<IChecksummedPersistentStorage> GetStorageAsync(SolutionKey solutionKey, CancellationToken cancellationToken)
         {
-            if (!DatabaseSupported(solutionKey, checkBranchId))
-                return new(NoOpPersistentStorage.GetOrThrow(Configuration.ThrowOnFailure));
-
-            return GetStorageWorkerAsync(solutionKey, cancellationToken);
+            return solutionKey.FilePath == null
+                ? new(NoOpPersistentStorage.GetOrThrow(Configuration.ThrowOnFailure))
+                : GetStorageWorkerAsync(solutionKey, cancellationToken);
         }
 
         internal async ValueTask<IChecksummedPersistentStorage> GetStorageWorkerAsync(SolutionKey solutionKey, CancellationToken cancellationToken)
@@ -75,7 +74,7 @@ namespace Microsoft.CodeAnalysis.Storage
                     // instance.  Then once all other existing clients who are holding onto this
                     // instance let go, it will finally get truly disposed.
                     // This operation is not safe to cancel (as dispose must happen).
-                    _ = Task.Run(() => storageToDispose.Dispose(), CancellationToken.None);
+                    _ = Task.Run(storageToDispose.Dispose, CancellationToken.None);
 
                     _currentPersistentStorage = null;
                     _currentPersistentStorageSolutionId = null;
@@ -94,22 +93,6 @@ namespace Microsoft.CodeAnalysis.Storage
                 // the refcounts, this instance will not be actually disposed.
                 return PersistentStorageReferenceCountedDisposableWrapper.AddReferenceCountToAndCreateWrapper(_currentPersistentStorage);
             }
-        }
-
-        private static bool DatabaseSupported(SolutionKey solution, bool checkBranchId)
-        {
-            if (solution.FilePath == null)
-            {
-                return false;
-            }
-
-            if (checkBranchId && !solution.IsPrimaryBranch)
-            {
-                // we only use database for primary solution. (Ex, forked solution will not use database)
-                return false;
-            }
-
-            return true;
         }
 
         private async ValueTask<IChecksummedPersistentStorage> CreatePersistentStorageAsync(
@@ -176,12 +159,9 @@ namespace Microsoft.CodeAnalysis.Storage
                 _currentPersistentStorageSolutionId = null;
             }
 
-            if (storage != null)
-            {
-                // Dispose storage outside of the lock. Note this only removes our reference count; clients who are still
-                // using this will still be holding a reference count.
-                storage.Dispose();
-            }
+            // Dispose storage outside of the lock. Note this only removes our reference count; clients who are still
+            // using this will still be holding a reference count.
+            storage?.Dispose();
         }
 
         internal TestAccessor GetTestAccessor()

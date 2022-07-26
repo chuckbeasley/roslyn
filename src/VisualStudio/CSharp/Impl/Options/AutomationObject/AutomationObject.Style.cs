@@ -69,6 +69,12 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
             set { SetXmlOption(CodeStyleOptions2.PreferCoalesceExpression, value); }
         }
 
+        public string Style_PreferMethodGroupConversion
+        {
+            get { return GetXmlOption(CSharpCodeStyleOptions.PreferMethodGroupConversion); }
+            set { SetXmlOption(CSharpCodeStyleOptions.PreferMethodGroupConversion, value); }
+        }
+
         public string Style_PreferNullPropagation
         {
             get { return GetXmlOption(CodeStyleOptions2.PreferNullPropagation); }
@@ -207,18 +213,6 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
             set { SetXmlOption(CodeStyleOptions2.PreferReadonly, value); }
         }
 
-        public int Style_PreferObjectInitializer_FadeOutCode
-        {
-            get { return GetBooleanOption(CodeStyleOptions2.PreferObjectInitializer_FadeOutCode); }
-            set { SetBooleanOption(CodeStyleOptions2.PreferObjectInitializer_FadeOutCode, value); }
-        }
-
-        public int Style_PreferCollectionInitializer_FadeOutCode
-        {
-            get { return GetBooleanOption(CodeStyleOptions2.PreferCollectionInitializer_FadeOutCode); }
-            set { SetBooleanOption(CodeStyleOptions2.PreferCollectionInitializer_FadeOutCode, value); }
-        }
-
         public string Style_PreferSimplifiedBooleanExpressions
         {
             get { return GetXmlOption(CodeStyleOptions2.PreferSimplifiedBooleanExpressions); }
@@ -269,8 +263,8 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
 
         public string Style_RequireAccessibilityModifiers
         {
-            get { return GetXmlOption(CodeStyleOptions2.RequireAccessibilityModifiers); }
-            set { SetXmlOption(CodeStyleOptions2.RequireAccessibilityModifiers, value); }
+            get { return GetXmlOption(CodeStyleOptions2.AccessibilityModifiersRequired); }
+            set { SetXmlOption(CodeStyleOptions2.AccessibilityModifiersRequired, value); }
         }
 
         public string Style_RemoveUnnecessarySuppressionExclusions
@@ -349,6 +343,12 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
         {
             get { return GetXmlOption(CSharpCodeStyleOptions.PreferSimpleUsingStatement); }
             set { SetXmlOption(CSharpCodeStyleOptions.PreferSimpleUsingStatement, value); }
+        }
+
+        public string Style_PreferTopLevelStatements
+        {
+            get { return GetXmlOption(CSharpCodeStyleOptions.PreferTopLevelStatements); }
+            set { SetXmlOption(CSharpCodeStyleOptions.PreferTopLevelStatements, value); }
         }
 
         public string Style_PreferLocalOverAnonymousFunction

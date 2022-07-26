@@ -11,7 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Text;
-using Microsoft.VisualStudio.Debugger.Contracts.EditAndContinue;
+using Microsoft.CodeAnalysis.EditAndContinue.Contracts;
 using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.EditAndContinue
@@ -121,7 +121,7 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
         private static bool TryGetUpToDateSpan(ManagedActiveStatementDebugInfo activeStatementInfo, ImmutableDictionary<ManagedMethodId, ImmutableArray<NonRemappableRegion>> remapping, out LinePositionSpan newSpan)
         {
             // Drop stale active statements - their location in the current snapshot is unknown.
-            if (activeStatementInfo.Flags.HasFlag(ActiveStatementFlags.IsStale))
+            if (activeStatementInfo.Flags.HasFlag(ActiveStatementFlags.Stale))
             {
                 newSpan = default;
                 return false;
@@ -141,9 +141,9 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
             {
                 foreach (var region in regionsInMethod)
                 {
-                    if (region.Span.Span.Contains(activeSpan) && activeStatementInfo.DocumentName == region.Span.Path)
+                    if (region.OldSpan.Span.Contains(activeSpan) && activeStatementInfo.DocumentName == region.OldSpan.Path)
                     {
-                        newSpan = activeSpan.AddLineDelta(region.LineDelta);
+                        newSpan = region.NewSpan.Span;
                         return true;
                     }
                 }
@@ -188,6 +188,7 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
                 // Also guard against active statements unmapped to multiple locations in the unmapped file
                 // (when multiple #line map to the same span that overlaps with the active statement).
                 if (TryGetTextSpan(oldText.Lines, unmappedLineSpan, out var unmappedSpan) &&
+                    oldRoot.FullSpan.Contains(unmappedSpan.Start) &&
                     mappedStatements.Add(activeStatement))
                 {
                     var exceptionRegions = analyzer.GetExceptionRegions(oldRoot, unmappedSpan, activeStatement.IsNonLeaf, cancellationToken);

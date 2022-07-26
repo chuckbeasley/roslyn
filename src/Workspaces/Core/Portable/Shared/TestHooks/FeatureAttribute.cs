@@ -12,15 +12,20 @@ namespace Microsoft.CodeAnalysis.Shared.TestHooks
         public const string CallHierarchy = nameof(CallHierarchy);
         public const string Classification = nameof(Classification);
         public const string CodeModel = nameof(CodeModel);
+        public const string CodeDefinitionWindow = nameof(CodeDefinitionWindow);
         public const string CompletionSet = nameof(CompletionSet);
         public const string DesignerAttributes = nameof(DesignerAttributes);
         public const string DiagnosticService = nameof(DiagnosticService);
+        public const string DocumentOutline = nameof(DocumentOutline);
         public const string EncapsulateField = nameof(EncapsulateField);
         public const string ErrorList = nameof(ErrorList);
         public const string ErrorSquiggles = nameof(ErrorSquiggles);
         public const string EventHookup = nameof(EventHookup);
+        public const string ExtractMethod = nameof(ExtractMethod);
         public const string FindReferences = nameof(FindReferences);
         public const string GlobalOperation = nameof(GlobalOperation);
+        public const string GoToBase = nameof(GoToBase);
+        public const string GoToDefinition = nameof(GoToDefinition);
         public const string GoToImplementation = nameof(GoToImplementation);
         public const string GraphProvider = nameof(GraphProvider);
         public const string InfoBar = nameof(InfoBar);
@@ -48,9 +53,12 @@ namespace Microsoft.CodeAnalysis.Shared.TestHooks
         public const string SignatureHelp = nameof(SignatureHelp);
         public const string Snippets = nameof(Snippets);
         public const string SolutionCrawler = nameof(SolutionCrawler);
+        public const string StringIndentation = nameof(StringIndentation);
         public const string Telemetry = nameof(Telemetry);
         public const string TodoCommentList = nameof(TodoCommentList);
         public const string LanguageServer = nameof(LanguageServer);
+        public const string ValueTracking = nameof(ValueTracking);
         public const string Workspace = nameof(Workspace);
+        public const string AddImportsOnPaste = nameof(AddImportsOnPaste);
     }
 }

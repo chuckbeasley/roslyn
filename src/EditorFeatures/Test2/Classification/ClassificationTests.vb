@@ -9,7 +9,9 @@ Imports Microsoft.CodeAnalysis.Editor.Implementation.Classification
 Imports Microsoft.CodeAnalysis.Editor.Shared.Extensions
 Imports Microsoft.CodeAnalysis.Editor.Shared.Utilities
 Imports Microsoft.CodeAnalysis.Editor.UnitTests.Workspaces
+Imports Microsoft.CodeAnalysis.Host
 Imports Microsoft.CodeAnalysis.Host.Mef
+Imports Microsoft.CodeAnalysis.Options
 Imports Microsoft.CodeAnalysis.PooledObjects
 Imports Microsoft.CodeAnalysis.Shared.TestHooks
 Imports Microsoft.CodeAnalysis.Text
@@ -42,8 +44,10 @@ Namespace Microsoft.CodeAnalysis.Editor.UnitTests.Classification
                 Dim listenerProvider = workspace.ExportProvider.GetExportedValue(Of IAsynchronousOperationListenerProvider)
 
                 Dim provider = New SemanticClassificationViewTaggerProvider(
-                    workspace.ExportProvider.GetExportedValue(Of IThreadingContext),
+                    workspace.GetService(Of IThreadingContext),
                     workspace.GetService(Of ClassificationTypeMap),
+                    workspace.GetService(Of IGlobalOptionService),
+                    visibilityTracker:=Nothing,
                     listenerProvider)
 
                 Dim buffer = workspace.Documents.First().GetTextBuffer()
@@ -124,7 +128,7 @@ Namespace Microsoft.CodeAnalysis.Editor.UnitTests.Classification
             Public Sub AddLexicalClassifications(text As SourceText, textSpan As TextSpan, result As ArrayBuilder(Of ClassifiedSpan), cancellationToken As CancellationToken) Implements IClassificationService.AddLexicalClassifications
             End Sub
 
-            Public Sub AddSyntacticClassifications(workspace As Workspace, root As SyntaxNode, textSpan As TextSpan, result As ArrayBuilder(Of ClassifiedSpan), cancellationToken As CancellationToken) Implements IClassificationService.AddSyntacticClassifications
+            Public Sub AddSyntacticClassifications(services As HostSolutionServices, root As SyntaxNode, textSpan As TextSpan, result As ArrayBuilder(Of ClassifiedSpan), cancellationToken As CancellationToken) Implements IClassificationService.AddSyntacticClassifications
             End Sub
 
             Public Function AddSemanticClassificationsAsync(document As Document, textSpan As TextSpan, options As ClassificationOptions, result As ArrayBuilder(Of ClassifiedSpan), cancellationToken As CancellationToken) As Task Implements IClassificationService.AddSemanticClassificationsAsync
@@ -142,8 +146,12 @@ Namespace Microsoft.CodeAnalysis.Editor.UnitTests.Classification
                 Return New ValueTask(Of TextChangeRange?)
             End Function
 
-            Public Function ComputeSyntacticChangeRange(workspace As Workspace, oldRoot As SyntaxNode, newRoot As SyntaxNode, timeout As TimeSpan, cancellationToken As CancellationToken) As TextChangeRange? Implements IClassificationService.ComputeSyntacticChangeRange
+            Public Function ComputeSyntacticChangeRange(services As HostSolutionServices, oldRoot As SyntaxNode, newRoot As SyntaxNode, timeout As TimeSpan, cancellationToken As CancellationToken) As TextChangeRange? Implements IClassificationService.ComputeSyntacticChangeRange
                 Return Nothing
+            End Function
+
+            Public Function AddEmbeddedLanguageClassificationsAsync(document As Document, textSpan As TextSpan, options As ClassificationOptions, result As ArrayBuilder(Of ClassifiedSpan), cancellationToken As CancellationToken) As Task Implements IClassificationService.AddEmbeddedLanguageClassificationsAsync
+                Return Task.CompletedTask
             End Function
         End Class
     End Class

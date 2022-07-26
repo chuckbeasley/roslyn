@@ -5,6 +5,7 @@
 #nullable disable
 
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -66,7 +67,7 @@ public class App : C
 
             // ---------------------------
             // Metadata symbols
-            var typesym = comp2.SourceModule.GlobalNamespace.GetTypeMembers("App").FirstOrDefault() as INamedTypeSymbol;
+            var typesym = comp2.SourceModule.GlobalNamespace.GetTypeMembers("App").FirstOrDefault();
 
             // 'D'
             var member01 = (typesym.GetMembers("myEvent").Single() as IEventSymbol).Type;

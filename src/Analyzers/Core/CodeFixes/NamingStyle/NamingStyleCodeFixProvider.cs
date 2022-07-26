@@ -105,8 +105,7 @@ namespace Microsoft.CodeAnalysis.CodeFixes.NamingStyles
             Document document, ISymbol symbol, string fixedName, CancellationToken cancellationToken)
         {
             return await Renamer.RenameSymbolAsync(
-                document.Project.Solution, symbol, fixedName,
-                await document.GetOptionsAsync(cancellationToken).ConfigureAwait(false),
+                document.Project.Solution, symbol, new SymbolRenameOptions(), fixedName,
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -155,7 +154,7 @@ namespace Microsoft.CodeAnalysis.CodeFixes.NamingStyles
 #if CODE_STYLE  // https://github.com/dotnet/roslyn/issues/42218 tracks removing this conditional code.
                 return SpecializedCollections.SingletonEnumerable(codeAction);
 #else
-                var factory = _startingSolution.Workspace.Services.GetRequiredService<ISymbolRenamedCodeActionOperationFactoryWorkspaceService>();
+                var factory = _startingSolution.Services.GetRequiredService<ISymbolRenamedCodeActionOperationFactoryWorkspaceService>();
                 return new CodeActionOperation[]
                 {
                     codeAction,

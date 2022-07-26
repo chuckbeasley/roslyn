@@ -6,9 +6,11 @@ Imports System.Collections.Immutable
 Imports System.Threading
 Imports Microsoft.CodeAnalysis
 Imports Microsoft.CodeAnalysis.Diagnostics
+Imports Microsoft.CodeAnalysis.LanguageServices
 Imports Microsoft.CodeAnalysis.PooledObjects
 Imports Microsoft.CodeAnalysis.RemoveUnnecessaryImports
 Imports Microsoft.CodeAnalysis.Text
+Imports Microsoft.CodeAnalysis.VisualBasic.LanguageServices
 Imports Microsoft.CodeAnalysis.VisualBasic.Syntax
 
 Namespace Microsoft.CodeAnalysis.VisualBasic.RemoveUnnecessaryImports
@@ -16,18 +18,13 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.RemoveUnnecessaryImports
     Friend NotInheritable Class VisualBasicRemoveUnnecessaryImportsDiagnosticAnalyzer
         Inherits AbstractRemoveUnnecessaryImportsDiagnosticAnalyzer
 
-        Private Shared ReadOnly s_TitleAndMessageFormat As LocalizableString =
-            New LocalizableResourceString(NameOf(VisualBasicAnalyzersResources.Imports_statement_is_unnecessary), VisualBasicAnalyzersResources.ResourceManager, GetType(VisualBasicAnalyzersResources))
+        Public Sub New()
+            MyBase.New(New LocalizableResourceString(NameOf(VisualBasicAnalyzersResources.Imports_statement_is_unnecessary), VisualBasicAnalyzersResources.ResourceManager, GetType(VisualBasicAnalyzersResources)))
+        End Sub
 
-        Protected Overrides Function GetTitleAndMessageFormatForClassificationIdDescriptor() As LocalizableString
-            Return s_TitleAndMessageFormat
-        End Function
+        Protected Overrides ReadOnly Property SyntaxFacts As ISyntaxFacts = VisualBasicSyntaxFacts.Instance
 
-        Protected Overrides ReadOnly Property UnnecessaryImportsProvider As IUnnecessaryImportsProvider
-            Get
-                Return VisualBasicUnnecessaryImportsProvider.Instance
-            End Get
-        End Property
+        Protected Overrides ReadOnly Property UnnecessaryImportsProvider As IUnnecessaryImportsProvider = VisualBasicUnnecessaryImportsProvider.Instance
 
         Protected Overrides Function IsRegularCommentOrDocComment(trivia As SyntaxTrivia) As Boolean
             Return trivia.IsRegularOrDocComment()
@@ -60,13 +57,10 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.RemoveUnnecessaryImports
             Return SpecializedCollections.SingletonEnumerable(tree.GetCompilationUnitRoot().Imports.GetContainedSpan())
         End Function
 
-        Protected Overrides Function GetLastTokenDelegateForContiguousSpans() As Func(Of SyntaxNode, SyntaxToken)
-            Return Function(n)
-                       Dim lastToken = n.GetLastToken()
-                       Return If(lastToken.GetNextToken().Kind = SyntaxKind.CommaToken,
-                              lastToken.GetNextToken(),
-                              lastToken)
-                   End Function
+        Protected Overrides Function TryGetLastToken(node As SyntaxNode) As SyntaxToken?
+            Dim lastToken = node.GetLastToken()
+            Dim nextToken = lastToken.GetNextToken()
+            Return If(nextToken.Kind = SyntaxKind.CommaToken, nextToken, lastToken)
         End Function
     End Class
 End Namespace

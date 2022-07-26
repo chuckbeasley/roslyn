@@ -39,6 +39,73 @@ namespace Microsoft.CodeAnalysis.CSharp.EditAndContinue.UnitTests
         }
 
         [Fact]
+        public void Constructor_Delete()
+        {
+            using var _ = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: $$"""
+                        class C
+                        {
+                            public C()
+                            {
+                            }
+
+                            public C(int x)
+                            {
+                            }
+                        }
+                        """,
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "C");
+                        g.VerifyMethodDefNames(".ctor", ".ctor");
+                        g.VerifyMemberRefNames(/*CompilationRelaxationsAttribute.*/".ctor", /*RuntimeCompatibilityAttribute.*/".ctor", /*Object.*/".ctor", /*DebuggableAttribute*/".ctor");
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                            public C()
+                            {
+                            }
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember<INamedTypeSymbol>("C").InstanceConstructors.FirstOrDefault(c => c.Parameters.Length == 1), newSymbolProvider: c => c.GetMember("C")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames(".ctor");
+                        g.VerifyMemberRefNames(/* MissingMethodException */ ".ctor");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(2, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.Param, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(2, TableIndex.MethodDef),
+                            Handle(1, TableIndex.Param)
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        6 (0x6)
+                              .maxstack  8
+                              IL_0000:  newobj     0x0A000005
+                              IL_0005:  throw
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+                .Verify();
+        }
+
+        [Fact]
         public void Diagnostics_Nullable()
         {
             var source0 = @"
@@ -1185,7 +1252,7 @@ class C
         }
 
         [Fact]
-        public void Lambda_SynthesizedDelegate()
+        public void Lambda_SynthesizedDelegate_01()
         {
             var source0 = MarkedSource(@"
 class C
@@ -1273,6 +1340,409 @@ class C
                 "C.<>c: {<>9__0_0, <>9__0_1#1, <>9__0_2#1, <F>b__0_0, <F>b__0_1#1, <F>b__0_2#1}");
         }
 
+        [Fact]
+        public void Lambda_SynthesizedDelegate_02()
+        {
+            var source0 = MarkedSource(
+@"class C
+{
+    static unsafe void F()
+    {
+        var x = <N:0>(int* a, int b) => *a</N:0>;
+    }
+}");
+            var source1 = MarkedSource(
+@"class C
+{
+    static unsafe void F()
+    {
+        var x = <N:0>(int* a, int b) => b</N:0>;
+        var y = <N:1>(int a, int* b) => a</N:1>;
+        var z = <N:2>(int* a) => a</N:2>;
+    }
+}");
+            var source2 = MarkedSource(
+@"class C
+{
+    static unsafe void F()
+    {
+        var x = <N:0>(int* a, int b) => b</N:0>;
+        var y = <N:1>(int a, int* b) => *b</N:1>;
+        var z = <N:2>(int* a) => a</N:2>;
+    }
+}");
+            var source3 = MarkedSource(
+@"class C
+{
+    static unsafe void F()
+    {
+        var x = <N:0>(int* a, int b) => b</N:0>;
+        var y = <N:1>(int a, int* b) => b</N:1>;
+        var z = <N:2>(int* a) => a</N:2>;
+    }
+}");
+
+            var compilation0 = CreateCompilation(source0.Tree, options: ComSafeDebugDll.WithAllowUnsafe(true).WithMetadataImportOptions(MetadataImportOptions.All));
+            var compilation1 = compilation0.WithSource(source1.Tree);
+            var compilation2 = compilation1.WithSource(source2.Tree);
+            var compilation3 = compilation2.WithSource(source3.Tree);
+
+            var v0 = CompileAndVerify(compilation0, verify: Verification.Skipped);
+            var md0 = ModuleMetadata.CreateFromImage(v0.EmittedAssemblyData);
+            var reader0 = md0.MetadataReader;
+
+            var method0 = compilation0.GetMember<MethodSymbol>("C.F");
+            var method1 = compilation1.GetMember<MethodSymbol>("C.F");
+            var method2 = compilation2.GetMember<MethodSymbol>("C.F");
+            var method3 = compilation3.GetMember<MethodSymbol>("C.F");
+
+            var generation0 = EmitBaseline.CreateInitialBaseline(md0, v0.CreateSymReader().GetEncMethodDebugInfo);
+
+            CheckNames(reader0, reader0.GetTypeDefNames(), "<Module>", "<>f__AnonymousDelegate0", "C", "<>c");
+            CheckNames(reader0, reader0.GetMethodDefNames(), ".ctor", "Invoke", "F", ".ctor", ".cctor", ".ctor", "<F>b__0_0");
+
+            var diff1 = compilation1.EmitDifference(
+                generation0,
+                ImmutableArray.Create(SemanticEdit.Create(SemanticEditKind.Update, method0, method1, GetSyntaxMapFromMarkers(source0, source1), preserveLocalVariables: true)));
+
+            // Verify delta metadata contains expected rows.
+            using var md1 = diff1.GetMetadata();
+            var reader1 = md1.Reader;
+            var readers = new[] { reader0, reader1 };
+
+            EncValidation.VerifyModuleMvid(1, reader0, reader1);
+
+            CheckNames(readers, reader1.GetTypeDefNames(), "<>f__AnonymousDelegate1", "<>f__AnonymousDelegate2");
+            CheckNames(readers, reader1.GetMethodDefNames(), "F", "<F>b__0_0", ".ctor", "Invoke", ".ctor", "Invoke", "<F>b__0_1#1", "<F>b__0_2#1");
+
+            diff1.VerifySynthesizedMembers(
+                "C: {<>c}",
+                "C.<>c: {<>9__0_0, <>9__0_1#1, <>9__0_2#1, <F>b__0_0, <F>b__0_1#1, <F>b__0_2#1}");
+
+            var diff2 = compilation2.EmitDifference(
+                diff1.NextGeneration,
+                ImmutableArray.Create(SemanticEdit.Create(SemanticEditKind.Update, method1, method2, GetSyntaxMapFromMarkers(source1, source2), preserveLocalVariables: true)));
+
+            using var md2 = diff2.GetMetadata();
+            var reader2 = md2.Reader;
+            readers = new[] { reader0, reader1, reader2 };
+
+            EncValidation.VerifyModuleMvid(2, reader1, reader2);
+
+            CheckNames(readers, reader2.GetTypeDefNames());
+            CheckNames(readers, reader2.GetMethodDefNames(), "F", "<F>b__0_0", "<F>b__0_1#1", "<F>b__0_2#1");
+
+            diff2.VerifySynthesizedMembers(
+                "C: {<>c}",
+                "C.<>c: {<>9__0_0, <>9__0_1#1, <>9__0_2#1, <F>b__0_0, <F>b__0_1#1, <F>b__0_2#1}");
+
+            var diff3 = compilation3.EmitDifference(
+                diff2.NextGeneration,
+                ImmutableArray.Create(SemanticEdit.Create(SemanticEditKind.Update, method2, method3, GetSyntaxMapFromMarkers(source2, source3), preserveLocalVariables: true)));
+
+            Assert.False(diff3.EmitResult.Success);
+            diff3.EmitResult.Diagnostics.Verify(
+                // error CS8984: Cannot update because an inferred delegate type has changed.
+                Diagnostic(ErrorCode.ERR_EncUpdateFailedDelegateTypeChanged).WithLocation(1, 1));
+        }
+
+        [Fact]
+        public void Lambda_SynthesizedDelegate_03()
+        {
+            var source0 = MarkedSource(
+@"class A { }
+struct B<T> { }
+class C
+{
+    static unsafe void F()
+    {
+        var x = <N:0>(B<A>* a, int b) => a</N:0>;
+    }
+}");
+            var source1 = MarkedSource(
+@"class A { }
+struct B<T> { }
+class C
+{
+    static unsafe void F()
+    {
+        var x = <N:0>(B<A>* a, int b) => b</N:0>;
+    }
+}");
+
+            var compilation0 = CreateCompilation(source0.Tree, options: ComSafeDebugDll.WithAllowUnsafe(true).WithMetadataImportOptions(MetadataImportOptions.All));
+            var compilation1 = compilation0.WithSource(source1.Tree);
+
+            var v0 = CompileAndVerify(compilation0, verify: Verification.Skipped);
+            var md0 = ModuleMetadata.CreateFromImage(v0.EmittedAssemblyData);
+            var reader0 = md0.MetadataReader;
+
+            var method0 = compilation0.GetMember<MethodSymbol>("C.F");
+            var method1 = compilation1.GetMember<MethodSymbol>("C.F");
+
+            var generation0 = EmitBaseline.CreateInitialBaseline(md0, v0.CreateSymReader().GetEncMethodDebugInfo);
+
+            CheckNames(reader0, reader0.GetTypeDefNames(), "<Module>", "<>f__AnonymousDelegate0", "A", "B`1", "C", "<>c");
+            CheckNames(reader0, reader0.GetMethodDefNames(), ".ctor", "Invoke", ".ctor", "F", ".ctor", ".cctor", ".ctor", "<F>b__0_0");
+
+            var diff1 = compilation1.EmitDifference(
+                generation0,
+                ImmutableArray.Create(SemanticEdit.Create(SemanticEditKind.Update, method0, method1, GetSyntaxMapFromMarkers(source0, source1), preserveLocalVariables: true)));
+
+            Assert.False(diff1.EmitResult.Success);
+            diff1.EmitResult.Diagnostics.Verify(
+                // error CS8984: Cannot update because an inferred delegate type has changed.
+                Diagnostic(ErrorCode.ERR_EncUpdateFailedDelegateTypeChanged).WithLocation(1, 1));
+        }
+
+        [Fact]
+        public void Lambda_SynthesizedDelegate_04()
+        {
+            var source0 = MarkedSource(
+@"class A { }
+struct B<T> { }
+class C
+{
+    static unsafe void F()
+    {
+    }
+}");
+            var source1 = MarkedSource(
+@"class A { }
+struct B<T> { }
+class C
+{
+    static unsafe void F()
+    {
+        var x = <N:0>(B<A>* a, int b) => a</N:0>;
+    }
+}");
+            var source2 = MarkedSource(
+@"class A { }
+struct B<T> { }
+class C
+{
+    static unsafe void F()
+    {
+        var x = <N:0>(B<A>* a, int b) => b</N:0>;
+    }
+}");
+
+            var compilation0 = CreateCompilation(source0.Tree, options: ComSafeDebugDll.WithAllowUnsafe(true).WithMetadataImportOptions(MetadataImportOptions.All));
+            var compilation1 = compilation0.WithSource(source1.Tree);
+            var compilation2 = compilation1.WithSource(source2.Tree);
+
+            var v0 = CompileAndVerify(compilation0, verify: Verification.Skipped);
+            var md0 = ModuleMetadata.CreateFromImage(v0.EmittedAssemblyData);
+            var reader0 = md0.MetadataReader;
+
+            var method0 = compilation0.GetMember<MethodSymbol>("C.F");
+            var method1 = compilation1.GetMember<MethodSymbol>("C.F");
+            var method2 = compilation2.GetMember<MethodSymbol>("C.F");
+
+            var generation0 = EmitBaseline.CreateInitialBaseline(md0, v0.CreateSymReader().GetEncMethodDebugInfo);
+
+            CheckNames(reader0, reader0.GetTypeDefNames(), "<Module>", "A", "B`1", "C");
+            CheckNames(reader0, reader0.GetMethodDefNames(), ".ctor", "F", ".ctor");
+
+            var diff1 = compilation1.EmitDifference(
+                generation0,
+                ImmutableArray.Create(SemanticEdit.Create(SemanticEditKind.Update, method0, method1, GetSyntaxMapFromMarkers(source0, source1), preserveLocalVariables: true)));
+
+            // Verify delta metadata contains expected rows.
+            using var md1 = diff1.GetMetadata();
+            var reader1 = md1.Reader;
+            var readers = new[] { reader0, reader1 };
+
+            EncValidation.VerifyModuleMvid(1, reader0, reader1);
+
+            CheckNames(readers, reader1.GetTypeDefNames(), "<>f__AnonymousDelegate0", "<>c");
+            CheckNames(readers, reader1.GetMethodDefNames(), "F", ".ctor", "Invoke", ".cctor", ".ctor", "<F>b__0#1");
+
+            diff1.VerifySynthesizedMembers(
+               "C.<>c: {<>9__0#1, <F>b__0#1}",
+               "C: {<>c}");
+
+            var diff2 = compilation2.EmitDifference(
+                diff1.NextGeneration,
+                ImmutableArray.Create(SemanticEdit.Create(SemanticEditKind.Update, method1, method2, GetSyntaxMapFromMarkers(source1, source2), preserveLocalVariables: true)));
+
+            Assert.False(diff2.EmitResult.Success);
+            diff2.EmitResult.Diagnostics.Verify(
+                // error CS8984: Cannot update because an inferred delegate type has changed.
+                Diagnostic(ErrorCode.ERR_EncUpdateFailedDelegateTypeChanged).WithLocation(1, 1));
+        }
+
+        [Fact]
+        public void Lambda_SynthesizedDelegate_05()
+        {
+            var source0 = MarkedSource(
+@"class C<T> where T : unmanaged
+{
+    static unsafe void F<U>() where U : unmanaged
+    {
+        var x = <N:0>(T t, U* u) => *u</N:0>;
+    }
+}");
+            var source1 = MarkedSource(
+@"class C<T> where T : unmanaged
+{
+    static unsafe void F<U>() where U : unmanaged
+    {
+        var x = <N:0>(T t, U* u) => default(U)</N:0>;
+        var y = <N:1>(U u, T* t) => *t</N:1>;
+    }
+}");
+            var source2 = MarkedSource(
+@"class C<T> where T : unmanaged
+{
+    static unsafe void F<U>() where U : unmanaged
+    {
+        var x = <N:0>(T t, U* u) => *u</N:0>;
+        var y = <N:1>(U u, T* t) => *t</N:1>;
+    }
+}");
+            var source3 = MarkedSource(
+@"class C<T> where T : unmanaged
+{
+    static unsafe void F<U>() where U : unmanaged
+    {
+        var x = <N:0>(T t, U* u) => *u</N:0>;
+        var y = <N:1>(U u, T* t) => t</N:1>;
+    }
+}");
+
+            var compilation0 = CreateCompilation(source0.Tree, options: ComSafeDebugDll.WithAllowUnsafe(true).WithMetadataImportOptions(MetadataImportOptions.All));
+            var compilation1 = compilation0.WithSource(source1.Tree);
+            var compilation2 = compilation1.WithSource(source2.Tree);
+            var compilation3 = compilation2.WithSource(source3.Tree);
+
+            var v0 = CompileAndVerify(compilation0, verify: Verification.Skipped);
+            var md0 = ModuleMetadata.CreateFromImage(v0.EmittedAssemblyData);
+            var reader0 = md0.MetadataReader;
+
+            var method0 = compilation0.GetMember<MethodSymbol>("C.F");
+            var method1 = compilation1.GetMember<MethodSymbol>("C.F");
+            var method2 = compilation2.GetMember<MethodSymbol>("C.F");
+            var method3 = compilation3.GetMember<MethodSymbol>("C.F");
+
+            var generation0 = EmitBaseline.CreateInitialBaseline(md0, v0.CreateSymReader().GetEncMethodDebugInfo);
+
+            CheckNames(reader0, reader0.GetTypeDefNames(), "<Module>", "<>f__AnonymousDelegate0`2", "EmbeddedAttribute", "IsUnmanagedAttribute", "C`1", "<>c__0`1");
+            CheckNames(reader0, reader0.GetMethodDefNames(), ".ctor", "Invoke", ".ctor", ".ctor", "F", ".ctor", ".cctor", ".ctor", "<F>b__0_0");
+
+            var diff1 = compilation1.EmitDifference(
+                generation0,
+                ImmutableArray.Create(SemanticEdit.Create(SemanticEditKind.Update, method0, method1, GetSyntaxMapFromMarkers(source0, source1), preserveLocalVariables: true)));
+
+            // Verify delta metadata contains expected rows.
+            using var md1 = diff1.GetMetadata();
+            var reader1 = md1.Reader;
+            var readers = new[] { reader0, reader1 };
+
+            EncValidation.VerifyModuleMvid(1, reader0, reader1);
+
+            CheckNames(readers, reader1.GetTypeDefNames(), "<>f__AnonymousDelegate1`2");
+            CheckNames(readers, reader1.GetMethodDefNames(), "F", "<F>b__0_0", ".ctor", "Invoke", "<F>b__0_1#1");
+
+            diff1.VerifySynthesizedMembers(
+                "Microsoft.CodeAnalysis: {EmbeddedAttribute}",
+                "Microsoft: {CodeAnalysis}",
+                "System.Runtime: {CompilerServices}",
+                "C<T>: {<>c__0}",
+                "<global namespace>: {Microsoft, System}",
+                "System: {Runtime}",
+                "System.Runtime.CompilerServices: {IsUnmanagedAttribute}",
+                "C<T>.<>c__0<U>: {<>9__0_0, <>9__0_1#1, <F>b__0_0, <F>b__0_1#1}");
+
+            var diff2 = compilation2.EmitDifference(
+                diff1.NextGeneration,
+                ImmutableArray.Create(SemanticEdit.Create(SemanticEditKind.Update, method1, method2, GetSyntaxMapFromMarkers(source1, source2), preserveLocalVariables: true)));
+
+            using var md2 = diff2.GetMetadata();
+            var reader2 = md2.Reader;
+            readers = new[] { reader0, reader1, reader2 };
+
+            EncValidation.VerifyModuleMvid(2, reader1, reader2);
+
+            CheckNames(readers, reader2.GetTypeDefNames());
+            CheckNames(readers, reader2.GetMethodDefNames(), "F", "<F>b__0_0", "<F>b__0_1#1");
+
+            diff2.VerifySynthesizedMembers(
+                "Microsoft.CodeAnalysis: {EmbeddedAttribute}",
+                "System: {Runtime}",
+                "<global namespace>: {Microsoft, System}",
+                "C<T>: {<>c__0}",
+                "System.Runtime.CompilerServices: {IsUnmanagedAttribute}",
+                "System.Runtime: {CompilerServices}",
+                "Microsoft: {CodeAnalysis}",
+                "C<T>.<>c__0<U>: {<>9__0_0, <>9__0_1#1, <F>b__0_0, <F>b__0_1#1}");
+
+            var diff3 = compilation3.EmitDifference(
+                diff2.NextGeneration,
+                ImmutableArray.Create(SemanticEdit.Create(SemanticEditKind.Update, method2, method3, GetSyntaxMapFromMarkers(source2, source3), preserveLocalVariables: true)));
+
+            Assert.False(diff3.EmitResult.Success);
+            diff3.EmitResult.Diagnostics.Verify(
+                // error CS8984: Cannot update because an inferred delegate type has changed.
+                Diagnostic(ErrorCode.ERR_EncUpdateFailedDelegateTypeChanged).WithLocation(1, 1));
+        }
+
+        [Fact]
+        public void Lambda_SynthesizedDelegate_06()
+        {
+            var source0 = MarkedSource(
+@"class C
+{
+    void F()
+    {
+        var x = <N:0>(int p1, int p2, int p3, int p4, int p5, int p6, int p7, int p8, int p9, int p10, int p11, int p12, int p13, int p14, int p15, int p16, int p17) => 1</N:0>;
+    }
+}");
+            var source1 = MarkedSource(
+@"class C
+{
+    void F()
+    {
+        var x = <N:0>(int p1, int p2, int p3, int p4, int p5, int p6, int p7, int p8, int p9, int p10, int p11, int p12, int p13, int p14, int p15, int p16, int p17) => 1</N:0>;
+
+        System.Console.WriteLine(1);
+    }
+}");
+
+            var compilation0 = CreateCompilation(source0.Tree, options: ComSafeDebugDll.WithMetadataImportOptions(MetadataImportOptions.All));
+            var compilation1 = compilation0.WithSource(source1.Tree);
+
+            var v0 = CompileAndVerify(compilation0, verify: Verification.Skipped);
+            var md0 = ModuleMetadata.CreateFromImage(v0.EmittedAssemblyData);
+            var reader0 = md0.MetadataReader;
+
+            var method0 = compilation0.GetMember<MethodSymbol>("C.F");
+            var method1 = compilation1.GetMember<MethodSymbol>("C.F");
+            var generation0 = EmitBaseline.CreateInitialBaseline(md0, v0.CreateSymReader().GetEncMethodDebugInfo);
+
+            CheckNames(reader0, reader0.GetTypeDefNames(), "<Module>", "<>F`18", "C", "<>c");
+            CheckNames(reader0, reader0.GetMethodDefNames(), ".ctor", "Invoke", "F", ".ctor", ".cctor", ".ctor", "<F>b__0_0");
+
+            var diff1 = compilation1.EmitDifference(
+                generation0,
+                ImmutableArray.Create(SemanticEdit.Create(SemanticEditKind.Update, method0, method1, GetSyntaxMapFromMarkers(source0, source1), preserveLocalVariables: true)));
+
+            // Verify delta metadata contains expected rows.
+            using var md1 = diff1.GetMetadata();
+            var reader1 = md1.Reader;
+            var readers = new[] { reader0, reader1 };
+
+            EncValidation.VerifyModuleMvid(1, reader0, reader1);
+
+            CheckNames(readers, reader1.GetTypeDefNames());
+            CheckNames(readers, reader1.GetMethodDefNames(), "F", "<F>b__0_0");
+
+            diff1.VerifySynthesizedMembers(
+                "C.<>c: {<>9__0_0, <F>b__0_0}",
+                "C: {<>c}");
+        }
+
         [WorkItem(962219, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/962219")]
         [Fact]
         public void PartialMethod()
@@ -1327,6 +1797,55 @@ class C
                 Handle(6, TableIndex.TypeRef),
                 Handle(2, TableIndex.MethodDef),
                 Handle(2, TableIndex.AssemblyRef));
+        }
+
+        [WorkItem(60804, "https://github.com/dotnet/roslyn/issues/60804")]
+        [Fact]
+        public void PartialMethod_WithLambda()
+        {
+            using var _ = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: @"
+partial class C
+{
+    partial void M();
+
+    partial void M()
+    {
+        var y = 4;
+        var x = () => y + 4;
+    }
+}
+",
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "C", "<>c__DisplayClass0_0");
+                        g.VerifyMethodDefNames("M", ".ctor", ".ctor", "<M>b__0");
+                    })
+
+                .AddGeneration(
+                    source: @"
+partial class C
+{
+    partial void M();
+
+    partial void M()
+    {
+        var y = 5;
+        var x = () => y + 4;
+    }
+}
+",
+                    edits: new[]
+                    {
+                        Edit(SemanticEditKind.Update, c => c.GetMember<IMethodSymbol>("C.M").PartialImplementationPart)
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyMethodDefNames("M", ".ctor", "<M>b__0#1");
+                    })
+
+                .Verify();
         }
 
         [Fact]
@@ -2462,6 +2981,136 @@ class C
         }
 
         [Fact]
+        public void Property_Delete()
+        {
+            using var _ = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: $$"""
+                        class C
+                        {
+                            public string P { get; set; }
+                        }
+                        """,
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "C");
+                        g.VerifyMethodDefNames("get_P", "set_P", ".ctor");
+                        g.VerifyMemberRefNames(/*CompilationRelaxationsAttribute.*/".ctor", /*RuntimeCompatibilityAttribute.*/".ctor", /*Object.*/".ctor", /*DebuggableAttribute*/".ctor", ".ctor", ".ctor");
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.get_P"), newSymbolProvider: c => c.GetMember("C")),
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.set_P"), newSymbolProvider: c => c.GetMember("C")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("get_P", "set_P");
+                        g.VerifyMemberRefNames(/* MissingMethodException */ ".ctor", ".ctor");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(1, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(2, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.Param, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.CustomAttribute, EditAndContinueOperation.Default),
+                            Row(7, TableIndex.CustomAttribute, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(1, TableIndex.MethodDef),
+                            Handle(2, TableIndex.MethodDef),
+                            Handle(1, TableIndex.Param),
+                            Handle(1, TableIndex.CustomAttribute),
+                            Handle(7, TableIndex.CustomAttribute)
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        6 (0x6)
+                              .maxstack  8
+                              IL_0000:  newobj     0x0A000008
+                              IL_0005:  throw
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+                .Verify();
+        }
+
+        [Fact]
+        public void Indexer_Delete()
+        {
+            using var _ = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: $$"""
+                        class C
+                        {
+                            public int this[int x] { get { return 1; } set { } }
+                        }
+                        """,
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "C");
+                        g.VerifyMethodDefNames("get_Item", "set_Item", ".ctor");
+                        g.VerifyMemberRefNames(/*CompilationRelaxationsAttribute.*/".ctor", /*RuntimeCompatibilityAttribute.*/".ctor", /*Object.*/".ctor", /*DebuggableAttribute*/".ctor", ".ctor");
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.get_Item"), newSymbolProvider: c => c.GetMember("C")),
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.set_Item"), newSymbolProvider: c => c.GetMember("C")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("get_Item", "set_Item");
+                        g.VerifyMemberRefNames(/* MissingMethodException */ ".ctor");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(1, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(2, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.Param, EditAndContinueOperation.Default),
+                            Row(2, TableIndex.Param, EditAndContinueOperation.Default),
+                            Row(3, TableIndex.Param, EditAndContinueOperation.Default),
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(1, TableIndex.MethodDef),
+                            Handle(2, TableIndex.MethodDef),
+                            Handle(1, TableIndex.Param),
+                            Handle(2, TableIndex.Param),
+                            Handle(3, TableIndex.Param),
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        6 (0x6)
+                              .maxstack  8
+                              IL_0000:  newobj     0x0A000006
+                              IL_0005:  throw
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+                .Verify();
+        }
+
+        [Fact]
         public void Event_Add()
         {
             var source0 = @"
@@ -2598,6 +3247,73 @@ class C
                 Handle(2, TableIndex.Event),
                 Handle(3, TableIndex.MethodSemantics),
                 Handle(4, TableIndex.MethodSemantics));
+        }
+
+        [Fact]
+        public void Event_Delete()
+        {
+            using var _ = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: $$"""
+                        class C
+                        {
+                            public event System.EventHandler E;
+                        }
+                        """,
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "C");
+                        g.VerifyMethodDefNames("add_E", "remove_E", ".ctor");
+                        g.VerifyMemberRefNames(/*CompilationRelaxationsAttribute.*/".ctor", /*RuntimeCompatibilityAttribute.*/".ctor", /*Object.*/".ctor", /*DebuggableAttribute*/".ctor", ".ctor", "Combine", "CompareExchange", "Remove", ".ctor");
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.add_E"), newSymbolProvider: c => c.GetMember("C")),
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.remove_E"), newSymbolProvider: c => c.GetMember("C")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("add_E", "remove_E");
+                        g.VerifyMemberRefNames(/* MissingMethodException */ ".ctor", ".ctor");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(1, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(2, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.Param, EditAndContinueOperation.Default),
+                            Row(2, TableIndex.Param, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.CustomAttribute, EditAndContinueOperation.Default),
+                            Row(7, TableIndex.CustomAttribute, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(1, TableIndex.MethodDef),
+                            Handle(2, TableIndex.MethodDef),
+                            Handle(1, TableIndex.Param),
+                            Handle(2, TableIndex.Param),
+                            Handle(1, TableIndex.CustomAttribute),
+                            Handle(7, TableIndex.CustomAttribute)
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        6 (0x6)
+                              .maxstack  8
+                              IL_0000:  newobj     0x0A00000B
+                              IL_0005:  throw
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+                .Verify();
         }
 
         [WorkItem(1175704, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/1175704")]
@@ -4932,7 +5648,11 @@ class C
 struct S
 {
     int a = 1;
-    int b;
+    int b = 2;
+    public S(int a)
+    {
+        this.a = a;
+    }
 }
 ";
             var source1 =
@@ -4940,11 +5660,14 @@ struct S
 struct S
 {
     int a = 1;
-    int b;
-
+    int b = 2;
+    public S(int a)
+    {
+        this.a = a;
+    }
     public S()
     {
-        b = 2;
+        b = 3;
     }
 }
 ";
@@ -4952,8 +5675,8 @@ struct S
             var compilation0 = CreateCompilation(source0, options: ComSafeDebugDll);
             var compilation1 = compilation0.WithSource(source1);
 
-            var ctor0 = compilation0.GetMember<MethodSymbol>("S..ctor");
-            var ctor1 = compilation1.GetMember<MethodSymbol>("S..ctor");
+            var ctor0 = compilation0.GetMember<NamedTypeSymbol>("S").InstanceConstructors.Single(m => m.ParameterCount == 0);
+            var ctor1 = compilation1.GetMember<NamedTypeSymbol>("S").InstanceConstructors.Single(m => m.ParameterCount == 0);
 
             var v0 = CompileAndVerify(compilation0, verify: Verification.Skipped);
 
@@ -4970,7 +5693,7 @@ struct S
             var diff1 = compilation1.EmitDifference(
                 generation0,
                 ImmutableArray.Create(
-                    SemanticEdit.Create(SemanticEditKind.Update, ctor0, ctor1)));
+                    SemanticEdit.Create(SemanticEditKind.Insert, null, ctor1)));
 
             // Verify delta metadata contains expected rows.
             using var md1 = diff1.GetMetadata();
@@ -4985,11 +5708,12 @@ struct S
             CheckEncLog(reader1,
                 Row(2, TableIndex.AssemblyRef, EditAndContinueOperation.Default),
                 Row(6, TableIndex.TypeRef, EditAndContinueOperation.Default),
-                Row(1, TableIndex.MethodDef, EditAndContinueOperation.Default));
+                Row(2, TableIndex.TypeDef, EditAndContinueOperation.AddMethod),
+                Row(2, TableIndex.MethodDef, EditAndContinueOperation.Default));
 
             CheckEncMap(reader1,
                 Handle(6, TableIndex.TypeRef),
-                Handle(1, TableIndex.MethodDef),
+                Handle(2, TableIndex.MethodDef),
                 Handle(2, TableIndex.AssemblyRef));
         }
 
@@ -7690,7 +8414,7 @@ class C
 
             diff1.VerifySynthesizedMembers(
                 "C.<>o__0#1: {<>p__0}",
-                "C: {<>o__0#1, <>c}",
+                "C: {<>c, <>o__0#1}",
                 "C.<>c: {<>9__0_0, <>9__0_1, <>9__0_2, <>9__0_3#1, <>9__0_4#1, <>9__0_3, <>9__0_6#1, <>9__0_4, <>9__0_5, <>9__0_6, <>9__0_10#1, <F>b__0_0, <F>b__0_1, <F>b__0_2, <F>b__0_3#1, <F>b__0_4#1, <F>b__0_3, <F>b__0_6#1, <F>b__0_4, <F>b__0_5, <F>b__0_6, <F>b__0_10#1}",
                 "<>f__AnonymousType4<<<>h__TransparentIdentifier0>j__TPar, <length>j__TPar>: {Equals, GetHashCode, ToString}",
                 "<>f__AnonymousType2<<Value>j__TPar, <Length>j__TPar>: {Equals, GetHashCode, ToString}",
@@ -8849,7 +9573,7 @@ public struct S
 }";
             var compilationPIA = CreateCompilation(sourcePIA, options: TestOptions.DebugDll);
             var referencePIA = compilationPIA.EmitToImageReference(embedInteropTypes: true);
-            var compilation0 = CreateCompilation(source0, options: TestOptions.DebugDll, references: new MetadataReference[] { referencePIA, CSharpRef });
+            var compilation0 = CreateCompilation(source0, parseOptions: TestOptions.Regular10, options: TestOptions.DebugDll, references: new MetadataReference[] { referencePIA, CSharpRef });
             var compilation1A = compilation0.WithSource(source1A);
             var compilation1B = compilation0.WithSource(source1B);
 
@@ -8971,6 +9695,64 @@ public interface IB
   IL_0018:  nop
   IL_0019:  ret
 }");
+        }
+
+        [Fact]
+        public void Operator_Delete()
+        {
+            using var _ = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: $$"""
+                        class C
+                        {
+                            public static bool operator !(C c) => true;
+                        }
+                        """,
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "C");
+                        g.VerifyMethodDefNames("op_LogicalNot", ".ctor");
+                        g.VerifyMemberRefNames(/*CompilationRelaxationsAttribute.*/".ctor", /*RuntimeCompatibilityAttribute.*/".ctor", /*Object.*/".ctor", /*DebuggableAttribute*/".ctor");
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.op_LogicalNot"), newSymbolProvider: c => c.GetMember("C")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("op_LogicalNot");
+                        g.VerifyMemberRefNames(/* MissingMethodException */ ".ctor");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(1, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.Param, EditAndContinueOperation.Default),
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(1, TableIndex.MethodDef),
+                            Handle(1, TableIndex.Param),
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        6 (0x6)
+                              .maxstack  8
+                              IL_0000:  newobj     0x0A000005
+                              IL_0005:  throw
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+                .Verify();
         }
 
         /// <summary>
@@ -11991,7 +12773,7 @@ public class Program
                     SemanticEdit.Create(SemanticEditKind.Update, n0, n1, GetSyntaxMapFromMarkers(source0, source1), preserveLocalVariables: true)));
 
             diff1.VerifySynthesizedMembers(
-                "Program: {<>c__DisplayClass2_0, <>c}",
+                "Program: {<>c, <>c__DisplayClass2_0}",
                 "Program.<>c__DisplayClass2_0: {x, <N>b__1}",
                 "Program.<>c: {<>9__2_0, <N>b__2_0}");
 
@@ -12063,7 +12845,7 @@ public class Program
 
             diff2.VerifySynthesizedMembers(
                 "Program.<>c__DisplayClass2_0: {x, <N>b__1}",
-                "Program: {<>c__DisplayClass2_0, <>c}",
+                "Program: {<>c, <>c__DisplayClass2_0}",
                 "Program.<>c: {<>9__2_0, <N>b__2_0}");
 
             diff2.VerifyIL("Program.N()", @"
@@ -12485,7 +13267,8 @@ namespace N
                 Row(4, TableIndex.TypeSpec, EditAndContinueOperation.Default),
                 Row(3, TableIndex.StandAloneSig, EditAndContinueOperation.Default),
                 Row(10, TableIndex.MethodDef, EditAndContinueOperation.Default), // R.PrintMembers
-                Row(3, TableIndex.Param, EditAndContinueOperation.Default));
+                Row(3, TableIndex.Param, EditAndContinueOperation.Default),
+                Row(22, TableIndex.CustomAttribute, EditAndContinueOperation.Default));
 
             CheckEncMap(reader1,
                 Handle(20, TableIndex.TypeRef),
@@ -12493,6 +13276,7 @@ namespace N
                 Handle(22, TableIndex.TypeRef),
                 Handle(10, TableIndex.MethodDef),
                 Handle(3, TableIndex.Param),
+                Handle(22, TableIndex.CustomAttribute),
                 Handle(3, TableIndex.StandAloneSig),
                 Handle(4, TableIndex.TypeSpec),
                 Handle(2, TableIndex.AssemblyRef));
@@ -12697,6 +13481,946 @@ class C
     .maxstack  1
     IL_0000:  ldc.i4.s   10
     IL_0002:  ret
+}");
+        }
+
+        [Theory]
+        [InlineData("void M1() { }", 0)]
+        [InlineData("void M1(string s) { }", 1)]
+        [InlineData("void M1(C c) { }", 1)]
+        [InlineData("C M1(C c) { return default; }", 1)]
+        [InlineData("void M1(N n) { }", 1)]
+        [InlineData("C M1() { return default; }", 0)]
+        [InlineData("N M1() { return default; }", 0)]
+        [InlineData("int M1(C c) { return 0; }", 1)]
+        [InlineData("void M1<T>(T t) { }", 1)]
+        [InlineData("void M1<T>(T t) where T : C { }", 1)]
+        [InlineData("T M1<T>() { return default; }", 0)]
+        [InlineData("T M1<T>() where T : C { return default; }", 0)]
+        public void Method_Delete(string methodDef, int parameterCount)
+        {
+            using var _ = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: $$"""
+                        class C
+                        {
+                            {{methodDef}}
+                        }
+
+                        class N
+                        {
+                        }
+                        """,
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "C", "N");
+                        g.VerifyMethodDefNames("M1", ".ctor", ".ctor");
+                        g.VerifyMemberRefNames(/*CompilationRelaxationsAttribute.*/".ctor", /*RuntimeCompatibilityAttribute.*/".ctor", /*Object.*/".ctor", /*DebuggableAttribute*/".ctor");
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                        }
+
+                        class N
+                        {
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.M1"), newSymbolProvider: c => c.GetMember("C")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M1");
+                        g.VerifyMemberRefNames(/* MissingMethodException */ ".ctor");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(1, TableIndex.MethodDef, EditAndContinueOperation.Default)
+                        }.Concat(Enumerable.Range(1, parameterCount).Select(i => Row(i, TableIndex.Param, EditAndContinueOperation.Default))));
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(1, TableIndex.MethodDef),
+                        }.Concat(Enumerable.Range(1, parameterCount).Select(i => Handle(i, TableIndex.Param))));
+
+                        var expectedIL = """
+                            {
+                              // Code size        6 (0x6)
+                              .maxstack  8
+                              IL_0000:  newobj     0x0A000005
+                              IL_0005:  throw
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+                .Verify();
+        }
+
+        [Fact]
+        public void Method_AddThenDelete()
+        {
+            using var _ = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: $$"""
+                        class C
+                        {
+                            void M1() { }
+                        }
+                        """,
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "C");
+                        g.VerifyMethodDefNames("M1", ".ctor");
+                        g.VerifyMemberRefNames(/*CompilationRelaxationsAttribute.*/".ctor", /*RuntimeCompatibilityAttribute.*/".ctor", /*Object.*/".ctor", /*DebuggableAttribute*/".ctor");
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                            void M1() { }
+                            void M2() { }
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Insert, symbolProvider: c => c.GetMember("C.M2")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M2");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(2, TableIndex.TypeDef, EditAndContinueOperation.AddMethod),
+                            Row(3, TableIndex.MethodDef, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(3, TableIndex.MethodDef),
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        2 (0x2)
+                              .maxstack  8
+                              IL_0000:  nop
+                              IL_0001:  ret
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                            void M1() { }
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.M2"), newSymbolProvider: c => c.GetMember("C")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M2");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(3, TableIndex.MethodDef, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(3, TableIndex.MethodDef),
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        6 (0x6)
+                              .maxstack  8
+                              IL_0000:  newobj     0x0A000005
+                              IL_0005:  throw
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+                .Verify();
+        }
+
+        [Fact]
+        public void Method_DeleteThenAdd()
+        {
+            using var _ = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: $$"""
+                        class C
+                        {
+                            void M1() { }
+                        }
+                        """,
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "C");
+                        g.VerifyMethodDefNames("M1", ".ctor");
+                        g.VerifyMemberRefNames(/*CompilationRelaxationsAttribute.*/".ctor", /*RuntimeCompatibilityAttribute.*/".ctor", /*Object.*/".ctor", /*DebuggableAttribute*/".ctor");
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.M1"), newSymbolProvider: c => c.GetMember("C")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M1");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(1, TableIndex.MethodDef, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(1, TableIndex.MethodDef),
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        6 (0x6)
+                              .maxstack  8
+                              IL_0000:  newobj     0x0A000005
+                              IL_0005:  throw
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                            void M1() { System.Console.Write(1); }
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Insert, symbolProvider: c => c.GetMember("C.M1")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M1");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(1, TableIndex.MethodDef, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(1, TableIndex.MethodDef),
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        9 (0x9)
+                              .maxstack  8
+                              IL_0000:  nop
+                              IL_0001:  ldc.i4.1
+                              IL_0002:  call       0x0A000006
+                              IL_0007:  nop
+                              IL_0008:  ret
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+                .Verify();
+        }
+
+        [Fact]
+        public void Method_DeleteThenAdd_WithAttributes()
+        {
+            using var _ = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: $$"""
+                        class A : System.Attribute { }
+                        class B : System.Attribute { }
+
+                        class C
+                        {
+                            [A]
+                            [return: A]
+                            void M1([A]int x) { }
+                        }
+                        """,
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "A", "B", "C");
+                        g.VerifyMethodDefNames(".ctor", ".ctor", "M1", ".ctor");
+                        g.VerifyMemberRefNames(/*CompilationRelaxationsAttribute.*/".ctor", /*RuntimeCompatibilityAttribute.*/".ctor", /*Object.*/".ctor", /*DebuggableAttribute*/".ctor", ".ctor");
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class A : System.Attribute { }
+                        class B : System.Attribute { }
+                        
+                        class C
+                        {
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.M1"), newSymbolProvider: c => c.GetMember("C")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M1");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(3, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.Param, EditAndContinueOperation.Default),
+                            Row(2, TableIndex.Param, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.CustomAttribute, EditAndContinueOperation.Default),
+                            Row(5, TableIndex.CustomAttribute, EditAndContinueOperation.Default),
+                            Row(6, TableIndex.CustomAttribute, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(3, TableIndex.MethodDef),
+                            Handle(1, TableIndex.Param),
+                            Handle(2, TableIndex.Param),
+                            Handle(1, TableIndex.CustomAttribute),
+                            Handle(5, TableIndex.CustomAttribute),
+                            Handle(6, TableIndex.CustomAttribute)
+                        });
+                        g.VerifyCustomAttributes(new[]
+{
+                            new CustomAttributeRow(Handle(1, TableIndex.Param), Handle(6, TableIndex.MemberRef)),
+                            new CustomAttributeRow(Handle(2, TableIndex.Param), Handle(6, TableIndex.MemberRef)),
+                            new CustomAttributeRow(Handle(3, TableIndex.MethodDef), Handle(6, TableIndex.MemberRef))
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        6 (0x6)
+                              .maxstack  8
+                              IL_0000:  newobj     0x0A000007
+                              IL_0005:  throw
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class A : System.Attribute { }
+                        class B : System.Attribute { }
+                        
+                        class C
+                        {
+                            [B]
+                            [return: B]
+                            void M1([B]int x) { }
+                        
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Insert, symbolProvider: c => c.GetMember("C.M1")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M1");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(3, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.Param, EditAndContinueOperation.Default),
+                            Row(2, TableIndex.Param, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.CustomAttribute, EditAndContinueOperation.Default),
+                            Row(5, TableIndex.CustomAttribute, EditAndContinueOperation.Default),
+                            Row(6, TableIndex.CustomAttribute, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(3, TableIndex.MethodDef),
+                            Handle(1, TableIndex.Param),
+                            Handle(2, TableIndex.Param),
+                            Handle(1, TableIndex.CustomAttribute),
+                            Handle(5, TableIndex.CustomAttribute),
+                            Handle(6, TableIndex.CustomAttribute)
+                        });
+                        g.VerifyCustomAttributes(new[]
+                        {
+                            new CustomAttributeRow(Handle(1, TableIndex.Param), Handle(2, TableIndex.MethodDef)),
+                            new CustomAttributeRow(Handle(2, TableIndex.Param), Handle(2, TableIndex.MethodDef)),
+                            new CustomAttributeRow(Handle(3, TableIndex.MethodDef), Handle(2, TableIndex.MethodDef))
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        2 (0x2)
+                              .maxstack  8
+                              IL_0000:  nop
+                              IL_0001:  ret
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+                .Verify();
+        }
+
+        [Fact]
+        public void Method_AddThenDeleteThenAdd()
+        {
+            using var _ = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: $$"""
+                        class C
+                        {
+                            void Goo() { }
+                        }
+                        """,
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "C");
+                        g.VerifyMethodDefNames("Goo", ".ctor");
+                        g.VerifyMemberRefNames(/*CompilationRelaxationsAttribute.*/".ctor", /*RuntimeCompatibilityAttribute.*/".ctor", /*Object.*/".ctor", /*DebuggableAttribute*/".ctor");
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                            void Goo() { }
+                            C M1(C c) { return default; }
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Insert, symbolProvider: c => c.GetMember("C.M1")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M1");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(1, TableIndex.StandAloneSig, EditAndContinueOperation.Default),
+                            Row(2, TableIndex.TypeDef, EditAndContinueOperation.AddMethod),
+                            Row(3, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(3, TableIndex.MethodDef, EditAndContinueOperation.AddParameter),
+                            Row(1, TableIndex.Param, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(3, TableIndex.MethodDef),
+                            Handle(1, TableIndex.Param),
+                            Handle(1, TableIndex.StandAloneSig)
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        7 (0x7)
+                              .maxstack  1
+                              IL_0000:  nop
+                              IL_0001:  ldnull
+                              IL_0002:  stloc.0
+                              IL_0003:  br.s       IL_0005
+                              IL_0005:  ldloc.0
+                              IL_0006:  ret
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                            void Goo() { }
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.M1"), newSymbolProvider: c => c.GetMember("C")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M1");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(3, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.Param, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(3, TableIndex.MethodDef),
+                            Handle(1, TableIndex.Param),
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size        6 (0x6)
+                              .maxstack  8
+                              IL_0000:  newobj     0x0A000005
+                              IL_0005:  throw
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+
+                    })
+
+                .AddGeneration(
+                    source: """
+                        class C
+                        {
+                            void Goo() { }
+                            C M1(C b) { System.Console.Write(1); return default; }
+                        }
+                        """,
+                    edits: new[] {
+                        Edit(SemanticEditKind.Insert, symbolProvider: c => c.GetMember("C.M1")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M1");
+                        g.VerifyEncLogDefinitions(new[]
+                        {
+                            Row(2, TableIndex.StandAloneSig, EditAndContinueOperation.Default),
+                            Row(3, TableIndex.MethodDef, EditAndContinueOperation.Default),
+                            Row(1, TableIndex.Param, EditAndContinueOperation.Default)
+                        });
+                        g.VerifyEncMapDefinitions(new[]
+                        {
+                            Handle(3, TableIndex.MethodDef),
+                            Handle(1, TableIndex.Param),
+                            Handle(2, TableIndex.StandAloneSig)
+                        });
+
+                        var expectedIL = """
+                            {
+                              // Code size       14 (0xe)
+                              .maxstack  1
+                              IL_0000:  nop
+                              IL_0001:  ldc.i4.1
+                              IL_0002:  call       0x0A000006
+                              IL_0007:  nop
+                              IL_0008:  ldnull
+                              IL_0009:  stloc.0
+                              IL_000a:  br.s       IL_000c
+                              IL_000c:  ldloc.0
+                              IL_000d:  ret
+                            }
+                            """;
+
+                        // Can't verify the IL of individual methods because that requires IMethodSymbolInternal implementations
+                        g.VerifyIL(expectedIL);
+                    })
+                .Verify();
+        }
+
+        [Fact]
+        public void Method_Rename_Multiple()
+        {
+            using var test = new EditAndContinueTest(options: TestOptions.DebugDll, targetFramework: TargetFramework.NetStandard20)
+                .AddGeneration(
+                    source: $$"""
+                        class C
+                        {
+                            int M1() { return 0; }
+                        }
+                        """,
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames("<Module>", "C");
+                        g.VerifyMethodDefNames("M1", ".ctor");
+                        g.VerifyMemberRefNames(/*CompilationRelaxationsAttribute.*/".ctor", /*RuntimeCompatibilityAttribute.*/".ctor", /*Object.*/".ctor", /*DebuggableAttribute*/".ctor");
+                    });
+
+            for (int i = 0; i < 10; i++)
+            {
+                test.AddGeneration(
+                    source: @$"
+class C
+{{
+    int M2() {{ return {i}; }}
+}}",
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.M1"), newSymbolProvider: c => c.GetMember("C")),
+                        Edit(SemanticEditKind.Insert, symbolProvider: c => c.GetMember("C.M2")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M1", "M2");
+                        g.VerifyDeletedMembers("C: {M1}");
+                    })
+                .AddGeneration(
+                    source: @$"
+class C
+{{
+    int M1() {{ return {i}; }}
+}}",
+                    edits: new[] {
+                        Edit(SemanticEditKind.Delete, symbolProvider: c => c.GetMember("C.M2"), newSymbolProvider: c => c.GetMember("C")),
+                        Edit(SemanticEditKind.Insert, symbolProvider: c => c.GetMember("C.M1")),
+                    },
+                    validator: g =>
+                    {
+                        g.VerifyTypeDefNames();
+                        g.VerifyMethodDefNames("M1", "M2");
+                        g.VerifyDeletedMembers("C: {M2}");
+                    });
+            }
+
+            test.Verify();
+        }
+
+        [Fact]
+        public void FileTypes_01()
+        {
+            var source0 = MarkedSource(@"
+using System;
+file class C
+{
+    void M()
+    {
+        Console.Write(<N:0>1</N:0>);
+    }
+}", "file1.cs");
+            var source1 = MarkedSource(@"
+using System;
+file class C
+{
+    void M()
+    {
+        Console.Write(<N:0>2</N:0>);
+    }
+}", "file1.cs");
+
+            var compilation0 = CreateCompilation(source0.Tree, options: ComSafeDebugDll);
+            var compilation1 = compilation0.WithSource(source1.Tree);
+
+            var method0 = compilation0.GetMember<MethodSymbol>("C.M");
+            var method1 = compilation1.GetMember<MethodSymbol>("C.M");
+
+            var v0 = CompileAndVerify(compilation0, verify: Verification.Skipped);
+
+            v0.VerifyIL("C@file1.M", @"
+{
+  // Code size        9 (0x9)
+  .maxstack  1
+  IL_0000:  nop
+  IL_0001:  ldc.i4.1
+  IL_0002:  call       ""void System.Console.Write(int)""
+  IL_0007:  nop
+  IL_0008:  ret
+}
+");
+
+            using var md0 = ModuleMetadata.CreateFromImage(v0.EmittedAssemblyData);
+
+            var generation0 = EmitBaseline.CreateInitialBaseline(md0, v0.CreateSymReader().GetEncMethodDebugInfo);
+
+            var diff = compilation1.EmitDifference(
+                generation0,
+                ImmutableArray.Create(
+                    SemanticEdit.Create(SemanticEditKind.Update, method0, method1, GetSyntaxMapFromMarkers(source0, source1), preserveLocalVariables: true)));
+
+            // There should be no diagnostics from rude edits
+            diff.EmitResult.Diagnostics.Verify();
+
+            diff.VerifyIL("C@file1.M", @"
+{
+  // Code size        9 (0x9)
+  .maxstack  1
+  IL_0000:  nop
+  IL_0001:  ldc.i4.2
+  IL_0002:  call       ""void System.Console.Write(int)""
+  IL_0007:  nop
+  IL_0008:  ret
+}");
+        }
+
+        [Fact]
+        public void FileTypes_02()
+        {
+            var source0 = MarkedSource(@"
+using System;
+file class C
+{
+    void M()
+    {
+        Console.Write(<N:0>1</N:0>);
+    }
+}", "file1.cs");
+            var source1 = MarkedSource(@"
+using System;
+file class C
+{
+    void M()
+    {
+        Console.Write(<N:0>2</N:0>);
+    }
+}", "file1.cs");
+            var source2 = MarkedSource(@"
+using System;
+file class C
+{
+    void M()
+    {
+        Console.Write(<N:0>3</N:0>);
+    }
+}", "file2.cs");
+
+            var compilation0 = CreateCompilation(source0.Tree, options: ComSafeDebugDll);
+            var compilation1 = compilation0.WithSource(new[] { source1.Tree, source2.Tree });
+
+            var cm1_gen0 = compilation0.GetMember<MethodSymbol>("C.M");
+            var cm1_gen1 = ((NamedTypeSymbol)compilation1.GetMembers("C")[0]).GetMember("M");
+            var c2_gen1 = ((NamedTypeSymbol)compilation1.GetMembers("C")[1]);
+
+            var v0 = CompileAndVerify(compilation0, verify: Verification.Skipped);
+
+            v0.VerifyIL("C@file1.M", @"
+{
+  // Code size        9 (0x9)
+  .maxstack  1
+  IL_0000:  nop
+  IL_0001:  ldc.i4.1
+  IL_0002:  call       ""void System.Console.Write(int)""
+  IL_0007:  nop
+  IL_0008:  ret
+}
+");
+
+            using var md0 = ModuleMetadata.CreateFromImage(v0.EmittedAssemblyData);
+
+            var generation0 = EmitBaseline.CreateInitialBaseline(md0, v0.CreateSymReader().GetEncMethodDebugInfo);
+
+            var diff = compilation1.EmitDifference(
+                generation0,
+                ImmutableArray.Create(
+                    SemanticEdit.Create(SemanticEditKind.Update, cm1_gen0, cm1_gen1, GetSyntaxMapFromMarkers(source0, source1), preserveLocalVariables: true),
+                    SemanticEdit.Create(SemanticEditKind.Insert, null, c2_gen1, syntaxMap: null, preserveLocalVariables: true)));
+
+            // There should be no diagnostics from rude edits
+            diff.EmitResult.Diagnostics.Verify();
+
+            diff.VerifyIL("C@file1.M", @"
+{
+  // Code size        9 (0x9)
+  .maxstack  1
+  IL_0000:  nop
+  IL_0001:  ldc.i4.2
+  IL_0002:  call       ""void System.Console.Write(int)""
+  IL_0007:  nop
+  IL_0008:  ret
+}");
+
+            diff.VerifyIL("C@file2.M", @"
+{
+  // Code size        9 (0x9)
+  .maxstack  1
+  IL_0000:  nop
+  IL_0001:  ldc.i4.3
+  IL_0002:  call       ""void System.Console.Write(int)""
+  IL_0007:  nop
+  IL_0008:  ret
+}");
+        }
+
+        [Fact]
+        public void FileTypes_03()
+        {
+            var source0_gen0 = MarkedSource(@"
+using System;
+file class C
+{
+    void M()
+    {
+        Console.Write(<N:0>1</N:0>);
+    }
+}", "file1.cs");
+            var source1_gen1 = MarkedSource(@"
+using System;
+file class C
+{
+    void M()
+    {
+        Console.Write(<N:0>2</N:0>);
+    }
+}", "file2.cs");
+            var source0_gen1 = MarkedSource(@"
+using System;
+file class C
+{
+    void M()
+    {
+        Console.Write(<N:0>3</N:0>);
+    }
+}", "file1.cs");
+
+            var compilation0 = CreateCompilation(source0_gen0.Tree, options: ComSafeDebugDll);
+            // Because the order of syntax trees has changed here, the original type is considered deleted and the two new types are completely new, unrelated types.
+
+            // https://github.com/dotnet/roslyn/issues/61999
+            // we should handle this as a modification of an existing type rather than deletion and insertion of distinct types.
+            // most likely, we either need to identify file types based on something stable like the SyntaxTree.FilePath, or store a mapping of the ordinals from one generation to the next.
+            // although "real-world" compilations disallow duplicated file paths, duplicated or empty file paths are very common via direct use of the APIs, so there's not necessarily a single slam-dunk answer here.
+            var compilation1 = compilation0.WithSource(new[] { source1_gen1.Tree, source0_gen1.Tree });
+
+            var c1_gen0 = compilation0.GetMember("C");
+            var c1_gen1 = ((NamedTypeSymbol)compilation1.GetMembers("C")[0]);
+            var c2_gen1 = ((NamedTypeSymbol)compilation1.GetMembers("C")[1]);
+
+            var v0 = CompileAndVerify(compilation0, verify: Verification.Skipped);
+
+            v0.VerifyIL("C@file1.M", @"
+{
+  // Code size        9 (0x9)
+  .maxstack  1
+  IL_0000:  nop
+  IL_0001:  ldc.i4.1
+  IL_0002:  call       ""void System.Console.Write(int)""
+  IL_0007:  nop
+  IL_0008:  ret
+}
+");
+
+            using var md0 = ModuleMetadata.CreateFromImage(v0.EmittedAssemblyData);
+
+            var generation0 = EmitBaseline.CreateInitialBaseline(md0, v0.CreateSymReader().GetEncMethodDebugInfo);
+
+            var diff = compilation1.EmitDifference(
+                generation0,
+                ImmutableArray.Create(
+                    SemanticEdit.Create(SemanticEditKind.Delete, c1_gen0, null, syntaxMap: null, preserveLocalVariables: true),
+                    SemanticEdit.Create(SemanticEditKind.Insert, null, c1_gen1, syntaxMap: null, preserveLocalVariables: true),
+                    SemanticEdit.Create(SemanticEditKind.Insert, null, c2_gen1, syntaxMap: null, preserveLocalVariables: true)));
+
+            // There should be no diagnostics from rude edits
+            diff.EmitResult.Diagnostics.Verify();
+
+            diff.VerifyIL("C@file1.M", @"
+{
+  // Code size        9 (0x9)
+  .maxstack  1
+  IL_0000:  nop
+  IL_0001:  ldc.i4.3
+  IL_0002:  call       ""void System.Console.Write(int)""
+  IL_0007:  nop
+  IL_0008:  ret
+}");
+
+            diff.VerifyIL("C@file2.M", @"
+{
+  // Code size        9 (0x9)
+  .maxstack  1
+  IL_0000:  nop
+  IL_0001:  ldc.i4.2
+  IL_0002:  call       ""void System.Console.Write(int)""
+  IL_0007:  nop
+  IL_0008:  ret
+}");
+        }
+
+        [Fact]
+        public void FileTypes_04()
+        {
+            var source1_gen0 = MarkedSource(@"
+using System;
+file class C
+{
+    void M()
+    {
+        Console.Write(<N:0>1</N:0>);
+    }
+}", "file1.cs");
+            var source2_gen0 = MarkedSource(@"
+using System;
+file class C
+{
+    void M()
+    {
+        Console.Write(<N:0>2</N:0>);
+    }
+}", "file2.cs");
+            var source2_gen1 = MarkedSource(@"
+using System;
+file class C
+{
+    void M()
+    {
+        Console.Write(<N:0>3</N:0>);
+    }
+}", "file2.cs");
+
+            var compilation0 = CreateCompilation(new[] { source1_gen0.Tree, source2_gen0.Tree }, options: ComSafeDebugDll);
+
+            var compilation1 = compilation0.WithSource(new[] { source2_gen1.Tree });
+
+            var c1_gen0 = ((NamedTypeSymbol)compilation0.GetMembers("C")[0]);
+            var c2_gen0 = ((NamedTypeSymbol)compilation0.GetMembers("C")[1]);
+            var c2_gen1 = compilation1.GetMember("C");
+
+            var v0 = CompileAndVerify(compilation0, verify: Verification.Skipped);
+
+            v0.VerifyIL("C@file2.M", @"
+{
+  // Code size        9 (0x9)
+  .maxstack  1
+  IL_0000:  nop
+  IL_0001:  ldc.i4.2
+  IL_0002:  call       ""void System.Console.Write(int)""
+  IL_0007:  nop
+  IL_0008:  ret
+}
+");
+
+            using var md0 = ModuleMetadata.CreateFromImage(v0.EmittedAssemblyData);
+
+            var generation0 = EmitBaseline.CreateInitialBaseline(md0, v0.CreateSymReader().GetEncMethodDebugInfo);
+
+            var diff = compilation1.EmitDifference(
+                generation0,
+                ImmutableArray.Create(
+                    SemanticEdit.Create(SemanticEditKind.Delete, c1_gen0, null, syntaxMap: null, preserveLocalVariables: true),
+                    SemanticEdit.Create(SemanticEditKind.Delete, c2_gen0, null, syntaxMap: null, preserveLocalVariables: true),
+                    SemanticEdit.Create(SemanticEditKind.Insert, null, c2_gen1, syntaxMap: null, preserveLocalVariables: true)));
+
+            // There should be no diagnostics from rude edits
+            diff.EmitResult.Diagnostics.Verify();
+
+            diff.VerifyIL("C@file2.M", @"
+{
+  // Code size        9 (0x9)
+  .maxstack  1
+  IL_0000:  nop
+  IL_0001:  ldc.i4.3
+  IL_0002:  call       ""void System.Console.Write(int)""
+  IL_0007:  nop
+  IL_0008:  ret
 }");
         }
     }

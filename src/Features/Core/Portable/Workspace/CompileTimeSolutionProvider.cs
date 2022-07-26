@@ -82,7 +82,7 @@ namespace Microsoft.CodeAnalysis.Host
         {
             lock (_gate)
             {
-                var cachedCompileTimeSolution = GetCachedCompileTimeSolution(designTimeSolution);
+                var (cachedCompileTimeSolution, staleSolution) = GetCachedCompileTimeSolution(designTimeSolution);
 
                 // Design time solution hasn't changed since we calculated the last compile-time solution:
                 if (cachedCompileTimeSolution != null)
@@ -90,24 +90,23 @@ namespace Microsoft.CodeAnalysis.Host
                     return cachedCompileTimeSolution;
                 }
 
-                using var _1 = ArrayBuilder<DocumentId>.GetInstance(out var configIdsToRemove);
-                using var _2 = ArrayBuilder<DocumentId>.GetInstance(out var documentIdsToRemove);
+                var compileTimeSolution = designTimeSolution;
 
-                foreach (var (_, projectState) in designTimeSolution.State.ProjectStates)
+                foreach (var (_, projectState) in compileTimeSolution.State.ProjectStates)
                 {
-                    var anyConfigs = false;
+                    using var _1 = ArrayBuilder<DocumentId>.GetInstance(out var configIdsToRemove);
+                    using var _2 = ArrayBuilder<DocumentId>.GetInstance(out var documentIdsToRemove);
 
                     foreach (var (_, configState) in projectState.AnalyzerConfigDocumentStates.States)
                     {
                         if (IsRazorAnalyzerConfig(configState))
                         {
                             configIdsToRemove.Add(configState.Id);
-                            anyConfigs = true;
                         }
                     }
 
                     // only remove design-time only documents when source-generated ones replace them
-                    if (anyConfigs)
+                    if (configIdsToRemove.Count > 0)
                     {
                         foreach (var (_, documentState) in projectState.DocumentStates.States)
                         {
@@ -116,12 +115,19 @@ namespace Microsoft.CodeAnalysis.Host
                                 documentIdsToRemove.Add(documentState.Id);
                             }
                         }
+
+                        compileTimeSolution = compileTimeSolution
+                            .RemoveAnalyzerConfigDocuments(configIdsToRemove.ToImmutable())
+                            .RemoveDocuments(documentIdsToRemove.ToImmutable());
+
+                        if (staleSolution is not null)
+                        {
+                            var existingStaleProject = staleSolution.GetProject(projectState.Id);
+                            if (existingStaleProject is not null)
+                                compileTimeSolution = compileTimeSolution.WithCachedSourceGeneratorState(projectState.Id, existingStaleProject);
+                        }
                     }
                 }
-
-                var compileTimeSolution = designTimeSolution
-                    .RemoveAnalyzerConfigDocuments(configIdsToRemove.ToImmutable())
-                    .RemoveDocuments(documentIdsToRemove.ToImmutable());
 
                 UpdateCachedCompileTimeSolution(designTimeSolution, compileTimeSolution);
 
@@ -129,7 +135,7 @@ namespace Microsoft.CodeAnalysis.Host
             }
         }
 
-        private Solution? GetCachedCompileTimeSolution(Solution designTimeSolution)
+        private (Solution? correctSolution, Solution? staleSolution) GetCachedCompileTimeSolution(Solution designTimeSolution)
         {
             // If the design time solution is for the primary branch, retrieve the last cached solution for it.
             // Otherwise this is a forked solution, so retrieve the last forked compile time solution we calculated.
@@ -141,10 +147,12 @@ namespace Microsoft.CodeAnalysis.Host
                     && designTimeSolution.WorkspaceVersion == cachedCompileTimeSolution.Value.DesignTimeSolutionVersion
                     && designTimeSolution.BranchId == cachedCompileTimeSolution.Value.DesignTimeSolutionBranch)
             {
-                return cachedCompileTimeSolution.Value.CompileTimeSolution;
+                var solution = cachedCompileTimeSolution.Value.CompileTimeSolution;
+                return (solution, solution);
             }
 
-            return null;
+            // We don't have a correct solution, but return the most likely thing we had to help caching when we recreate a new one.
+            return (null, cachedCompileTimeSolution?.CompileTimeSolution);
         }
 
         private void UpdateCachedCompileTimeSolution(Solution designTimeSolution, Solution compileTimeSolution)
@@ -183,7 +191,7 @@ namespace Microsoft.CodeAnalysis.Host
         }
 
         private static bool IsRazorDesignTimeDocument(DocumentState documentState)
-            => documentState.Attributes.DesignTimeOnly && documentState.FilePath?.EndsWith(".razor.g.cs") == true;
+            => documentState.Attributes.DesignTimeOnly && (documentState.FilePath?.EndsWith(".razor.g.cs") == true || documentState.FilePath?.EndsWith(".cshtml.g.cs") == true);
 
         internal static async Task<Document?> TryGetCompileTimeDocumentAsync(
             Document designTimeDocument,
@@ -205,57 +213,37 @@ namespace Microsoft.CodeAnalysis.Host
             var designTimeProjectDirectoryName = PathUtilities.GetDirectoryName(designTimeDocument.Project.FilePath)!;
 
             var generatedDocumentPath = BuildGeneratedDocumentPath(designTimeProjectDirectoryName, designTimeDocument.FilePath!, generatedDocumentPathPrefix);
-            var generatedDocumentPathNet6Preview7 = BuildGeneratedDocumentPathNet6Preview7(designTimeProjectDirectoryName, designTimeDocument.FilePath!, generatedDocumentPathPrefix);
 
             var sourceGeneratedDocuments = await compileTimeSolution.GetRequiredProject(designTimeDocument.Project.Id).GetSourceGeneratedDocumentsAsync(cancellationToken).ConfigureAwait(false);
-            return sourceGeneratedDocuments.SingleOrDefault(d => d.FilePath == generatedDocumentPath || d.FilePath == generatedDocumentPathNet6Preview7);
+            return sourceGeneratedDocuments.SingleOrDefault(d => d.FilePath == generatedDocumentPath);
         }
 
         /// <summary>
-        /// Prior to .net6 preview 7, the source generated path was built using a relative path with a preceding \
-        /// and without only .cs as part of the extension.
+        /// Note that in .NET 6 Preview 7 the source generator changed to passing in the relative doc path without a leading \ to GetIdentifierFromPath
+        /// which caused the source generated file name to no longer be prefixed by an _.  Additionally, the file extension was changed to .g.cs
         /// </summary>
         private static string BuildGeneratedDocumentPath(string designTimeProjectDirectoryName, string designTimeDocumentFilePath, string? generatedDocumentPathPrefix)
         {
-            var relativeDocumentPath = GetRelativeDocumentPathWithPrecedingSlash(designTimeProjectDirectoryName, designTimeDocumentFilePath);
-            var generatedDocumentPath = GetGeneratedDocumentPathWithoutExtension(relativeDocumentPath, generatedDocumentPathPrefix) + ".cs";
-            return generatedDocumentPath;
-        }
-
-        /// <summary>
-        /// In .net6 p7 the source generator changed to passing in the relative doc path without a leading \ to GetIdentifierFromPath
-        /// which caused the source generated file name to no longer be prefixed by an _.  Additionally, the file extension was changed to .g.cs
-        /// </summary>
-        private static string BuildGeneratedDocumentPathNet6Preview7(string designTimeProjectDirectoryName, string designTimeDocumentFilePath, string? generatedDocumentPathPrefix)
-        {
             var relativeDocumentPath = GetRelativeDocumentPath(designTimeProjectDirectoryName, designTimeDocumentFilePath);
-            var generatedDocumentPath = GetGeneratedDocumentPathWithoutExtension(relativeDocumentPath, generatedDocumentPathPrefix) + ".g.cs";
-            return generatedDocumentPath;
+            return GetGeneratedDocumentPathWithoutExtension(relativeDocumentPath, generatedDocumentPathPrefix) + ".g.cs";
         }
 
         private static string GetRelativeDocumentPath(string projectDirectory, string designTimeDocumentFilePath)
             => PathUtilities.GetRelativePath(projectDirectory, designTimeDocumentFilePath)[..^".g.cs".Length];
-
-        private static string GetRelativeDocumentPathWithPrecedingSlash(string projectDirectory, string designTimeDocumentFilePath)
-            => Path.Combine("\\", GetRelativeDocumentPath(projectDirectory, designTimeDocumentFilePath));
 
         private static string GetGeneratedDocumentPathWithoutExtension(string relativeDocumentPath, string? generatedDocumentPathPrefix)
             => Path.Combine(generatedDocumentPathPrefix ?? s_razorSourceGeneratorFileNamePrefix, GetIdentifierFromPath(relativeDocumentPath));
 
         private static bool HasMatchingFilePath(string designTimeDocumentFilePath, string designTimeProjectDirectory, string compileTimeFilePath)
         {
-            // Check for matching file names created from a relative path with and without a preceding slash as both
-            // are valid depening on the which sdk.  See BuildGeneratedDocumentPathNet6Preview7.
             var relativeDocumentPath = GetRelativeDocumentPath(designTimeProjectDirectory, designTimeDocumentFilePath);
-            var relativeDocumentPathWithSlash = GetRelativeDocumentPathWithPrecedingSlash(designTimeProjectDirectory, designTimeDocumentFilePath);
 
             var compileTimeFileName = PathUtilities.GetFileName(compileTimeFilePath, includeExtension: false);
 
-            // Sdks including and after .net6 preview7 have compile time file names ending with ".g.cs".
-            if (compileTimeFileName.EndsWith(".g"))
+            if (compileTimeFileName.EndsWith(".g", StringComparison.Ordinal))
                 compileTimeFileName = compileTimeFileName[..^".g".Length];
 
-            return compileTimeFileName == GetIdentifierFromPath(relativeDocumentPath) || compileTimeFileName == GetIdentifierFromPath(relativeDocumentPathWithSlash);
+            return compileTimeFileName == GetIdentifierFromPath(relativeDocumentPath);
         }
 
         internal static async Task<ImmutableArray<DocumentId>> GetDesignTimeDocumentsAsync(

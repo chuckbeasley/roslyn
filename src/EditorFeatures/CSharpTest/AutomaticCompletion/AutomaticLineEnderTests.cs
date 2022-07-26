@@ -203,6 +203,40 @@ $$", "class {$$}");
         }
 
         [WpfFact]
+        [WorkItem(57323, "https://github.com/dotnet/roslyn/issues/57323")]
+        public void EmbededStatementFollowedByStatement()
+        {
+            Test(@"class C
+{
+    void Method()
+    {
+        if (true)
+        {
+        }
+        if (true)
+        {
+            $$
+        }
+        if (true)
+        {
+        }
+    }
+}", @"class C
+{
+    void Method()
+    {
+        if (true)
+        {
+        }
+        if (true$$)
+        if (true)
+        {
+        }
+    }
+}");
+        }
+
+        [WpfFact]
         public void Statement()
         {
             Test(@"class C
@@ -3046,6 +3080,161 @@ public class Bar
         {
         }
     }
+}");
+        }
+
+        [WpfFact]
+        public void TestObjectCreationExpressionWithMissingType()
+        {
+            Test(@"
+public class Bar
+{
+    public void Bar2()
+    {
+        Bar b = new()
+        {
+            $$
+        };
+    }
+}",
+@"
+public class Bar
+{
+    public void Bar2()
+    {
+        Bar b = new$$
+    }
+}");
+        }
+
+        [WpfFact]
+        public void TestRemoveInitializerForImplicitObjectCreationExpression()
+        {
+            Test(@"
+public class Bar
+{
+    public void Bar2()
+    {
+        Bar b = new();
+        $$
+    }
+}",
+@"
+public class Bar
+{
+    public void Bar2()
+    {
+        Bar b = new()
+        {
+            $$
+        };
+    }
+}");
+        }
+
+        [WpfTheory]
+        [InlineData("checked")]
+        [InlineData("unchecked")]
+        public void TestCheckedStatement(string keywordToken)
+        {
+            Test($@"
+public class Bar
+{{
+    public void Bar2()
+    {{
+        {keywordToken}
+        {{
+            $$
+        }}
+    }}
+}}",
+$@"
+public class Bar
+{{
+    public void Bar2()
+    {{
+        {keywordToken}$$
+    }}
+}}");
+        }
+
+        [WpfTheory]
+        [InlineData("checked")]
+        [InlineData("unchecked")]
+        public void TextCheckedExpression(string keywordToken)
+        {
+            Test($@"
+public class Bar
+{{
+    public void Bar2()
+    {{
+        var i = {keywordToken}(1 + 1);
+        $$
+    }}
+}}",
+$@"
+public class Bar
+{{
+    public void Bar2()
+    {{
+        var i = {keywordToken}$$(1 +$$ 1)$$
+    }}
+}}");
+        }
+
+        [WpfFact]
+        public void TestConvertFieldToPropertyWithAttributeAndComment()
+        {
+            Test(@"
+public class Bar
+{
+    public int Property
+    {
+        $$
+    }
+
+    /// <summary>
+    /// </summary>
+    [SomeAttri]
+    public void Method() { }
+}",
+@"
+public class Bar
+{
+    public int Property$$
+
+    /// <summary>
+    /// </summary>
+    [SomeAttri]
+    public void Method() { }
+}");
+        }
+
+        [WpfFact]
+        public void TestConvertEventFieldToPropertyWithAttributeAndComment()
+        {
+            Test(@"
+public class Bar
+{
+    public event EventHandler MyEvent
+    {
+        $$
+    }
+
+    /// <summary>
+    /// </summary>
+    [SomeAttri]
+    public void Method() { }
+}",
+@"
+public class Bar
+{
+    public event EventHandler MyEvent$$
+
+    /// <summary>
+    /// </summary>
+    [SomeAttri]
+    public void Method() { }
 }");
         }
 

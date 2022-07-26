@@ -21,9 +21,9 @@ namespace Microsoft.CodeAnalysis.LanguageServerIndexFormat.Generator
         public Compilation Compilation { get; }
         public HostLanguageServices LanguageServices { get; }
         public string ProjectFilePath { get; }
-        public OptionSet Options { get; }
+        public GeneratorOptions Options { get; }
 
-        public CompilerInvocation(Compilation compilation, HostLanguageServices languageServices, string projectFilePath, OptionSet options)
+        public CompilerInvocation(Compilation compilation, HostLanguageServices languageServices, string projectFilePath, GeneratorOptions options)
         {
             Compilation = compilation;
             LanguageServices = languageServices;
@@ -35,7 +35,11 @@ namespace Microsoft.CodeAnalysis.LanguageServerIndexFormat.Generator
         {
             var invocationInfo = JsonConvert.DeserializeObject<CompilerInvocationInfo>(jsonContents);
             Assumes.Present(invocationInfo);
+            return await CreateFromInvocationInfoAsync(invocationInfo);
+        }
 
+        public static async Task<CompilerInvocation> CreateFromInvocationInfoAsync(CompilerInvocationInfo invocationInfo)
+        {
             // We will use a Workspace to simplify the creation of the compilation, but will be careful not to return the Workspace instance from this class.
             // We will still provide the language services which are used by the generator itself, but we don't tie it to a Workspace object so we can
             // run this as an in-proc source generator if one day desired.
@@ -101,11 +105,11 @@ namespace Microsoft.CodeAnalysis.LanguageServerIndexFormat.Generator
                 analyzerReferences: parsedCommandLine.AnalyzerReferences.Select(r => new AnalyzerFileReference(r.FilePath, analyzerLoader)))
                 .WithAnalyzerConfigDocuments(parsedCommandLine.AnalyzerConfigPaths.Select(CreateDocumentInfo));
 
-            workspace.AddProject(projectInfo);
+            var solution = workspace.CurrentSolution.AddProject(projectInfo);
+            var compilation = await solution.GetRequiredProject(projectId).GetRequiredCompilationAsync(CancellationToken.None);
+            var options = GeneratorOptions.Default;
 
-            var compilation = await workspace.CurrentSolution.GetProject(projectId)!.GetRequiredCompilationAsync(CancellationToken.None);
-
-            return new CompilerInvocation(compilation, languageServices, invocationInfo.ProjectFilePath, workspace.CurrentSolution.Options);
+            return new CompilerInvocation(compilation, languageServices, invocationInfo.ProjectFilePath, options);
 
             // Local methods:
             DocumentInfo CreateDocumentInfo(string unmappedPath)
@@ -180,7 +184,7 @@ namespace Microsoft.CodeAnalysis.LanguageServerIndexFormat.Generator
         /// <summary>
         /// A simple data class that represents the schema for JSON serialization.
         /// </summary>
-        private sealed class CompilerInvocationInfo
+        public sealed class CompilerInvocationInfo
         {
 #nullable disable // this class is used for deserialization by Newtonsoft.Json, so we don't really need warnings about this class itself
 

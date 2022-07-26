@@ -558,11 +558,11 @@ class Program
   IL_000e:  unbox.any  ""double""
   IL_0013:  stloc.1
   IL_0014:  ldloc.1
-  IL_0015:  ldc.r8     3.14
-  IL_001e:  beq.s      IL_0055
-  IL_0020:  ldloc.1
-  IL_0021:  call       ""bool double.IsNaN(double)""
-  IL_0026:  brtrue.s   IL_004b
+  IL_0015:  call       ""bool double.IsNaN(double)""
+  IL_001a:  brtrue.s   IL_004b
+  IL_001c:  ldloc.1
+  IL_001d:  ldc.r8     3.14
+  IL_0026:  beq.s      IL_0055
   IL_0028:  br.s       IL_005f
   IL_002a:  ldloc.0
   IL_002b:  isinst     ""float""
@@ -571,11 +571,11 @@ class Program
   IL_0033:  unbox.any  ""float""
   IL_0038:  stloc.2
   IL_0039:  ldloc.2
-  IL_003a:  ldc.r4     3.14
-  IL_003f:  beq.s      IL_005a
+  IL_003a:  call       ""bool float.IsNaN(float)""
+  IL_003f:  brtrue.s   IL_0050
   IL_0041:  ldloc.2
-  IL_0042:  call       ""bool float.IsNaN(float)""
-  IL_0047:  brtrue.s   IL_0050
+  IL_0042:  ldc.r4     3.14
+  IL_0047:  beq.s      IL_005a
   IL_0049:  br.s       IL_005f
   IL_004b:  ldc.i4.1
   IL_004c:  stloc.s    V_4
@@ -3321,6 +3321,24 @@ static class C {
             compilation.GetEmitDiagnostics().Verify(
                 // warning CS8021: No value for RuntimeMetadataVersion found. No assembly containing System.Object was found nor was a value for RuntimeMetadataVersion specified through options.
                 Diagnostic(ErrorCode.WRN_NoRuntimeMetadataVersion).WithLocation(1, 1),
+                // (9,5): error CS0518: Predefined type 'System.Byte' is not defined or imported
+                //     public static bool M(int i) => i switch { 1 => true };
+                Diagnostic(ErrorCode.ERR_PredefinedTypeNotFound, "public static bool M(int i) => i switch { 1 => true };").WithArguments("System.Byte").WithLocation(9, 5),
+                // (9,5): error CS0518: Predefined type 'System.Byte' is not defined or imported
+                //     public static bool M(int i) => i switch { 1 => true };
+                Diagnostic(ErrorCode.ERR_PredefinedTypeNotFound, "public static bool M(int i) => i switch { 1 => true };").WithArguments("System.Byte").WithLocation(9, 5),
+                // (9,5): error CS0518: Predefined type 'System.Int16' is not defined or imported
+                //     public static bool M(int i) => i switch { 1 => true };
+                Diagnostic(ErrorCode.ERR_PredefinedTypeNotFound, "public static bool M(int i) => i switch { 1 => true };").WithArguments("System.Int16").WithLocation(9, 5),
+                // (9,5): error CS0518: Predefined type 'System.Int16' is not defined or imported
+                //     public static bool M(int i) => i switch { 1 => true };
+                Diagnostic(ErrorCode.ERR_PredefinedTypeNotFound, "public static bool M(int i) => i switch { 1 => true };").WithArguments("System.Int16").WithLocation(9, 5),
+                // (9,5): error CS0518: Predefined type 'System.Int64' is not defined or imported
+                //     public static bool M(int i) => i switch { 1 => true };
+                Diagnostic(ErrorCode.ERR_PredefinedTypeNotFound, "public static bool M(int i) => i switch { 1 => true };").WithArguments("System.Int64").WithLocation(9, 5),
+                // (9,5): error CS0518: Predefined type 'System.Int64' is not defined or imported
+                //     public static bool M(int i) => i switch { 1 => true };
+                Diagnostic(ErrorCode.ERR_PredefinedTypeNotFound, "public static bool M(int i) => i switch { 1 => true };").WithArguments("System.Int64").WithLocation(9, 5),
                 // (9,36): error CS0656: Missing compiler required member 'System.InvalidOperationException..ctor'
                 //     public static bool M(int i) => i switch { 1 => true };
                 Diagnostic(ErrorCode.ERR_MissingPredefinedMember, "i switch { 1 => true }").WithArguments("System.InvalidOperationException", ".ctor").WithLocation(9, 36),

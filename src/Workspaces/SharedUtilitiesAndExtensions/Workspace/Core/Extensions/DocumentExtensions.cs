@@ -7,11 +7,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.GeneratedCodeRecognition;
 using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.SemanticModelReuse;
 using Microsoft.CodeAnalysis.Text;
 using Roslyn.Utilities;
+using Microsoft.CodeAnalysis.Editing;
 
 #if DEBUG
 using System.Collections.Immutable;
@@ -204,16 +206,23 @@ namespace Microsoft.CodeAnalysis.Shared.Extensions
             }
         }
 
-        public static bool CanAddImportsInHiddenRegions(this Document document)
+#if CODE_STYLE
+        public static async ValueTask<AnalyzerConfigOptions> GetAnalyzerConfigOptionsAsync(this Document document, CancellationToken cancellationToken)
         {
-#if !CODE_STYLE
-            // Normally we don't allow generation into a hidden region in the file.  However, if we have a
-            // modern span mapper at our disposal, we do allow it as that host span mapper can handle mapping
-            // our edit to their domain appropriate.
-            var spanMapper = document.Services.GetService<ISpanMappingService>();
-            return spanMapper != null && spanMapper.SupportsMappingImportDirectives;
+            var syntaxTree = await document.GetRequiredSyntaxTreeAsync(cancellationToken).ConfigureAwait(false);
+            return document.Project.AnalyzerOptions.AnalyzerConfigOptionsProvider.GetOptions(syntaxTree);
+        }
+#endif
+
+        public static SyntaxEditor GetSyntaxEditor(this Document document, SyntaxNode root)
+        {
+#if CODE_STYLE
+            // Remove once Solution.Services becomes public: https://github.com/dotnet/roslyn/issues/62914
+#pragma warning disable RS0030 // Do not used banned APIs.  This is the shim method to use until the api becomes public.
+            return new SyntaxEditor(root, document.Project.Solution.Workspace.Services);
+#pragma warning restore RS0030 // Do not used banned APIs
 #else
-            return false;
+            return new SyntaxEditor(root, document.Project.Solution.Services);
 #endif
         }
     }

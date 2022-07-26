@@ -33,7 +33,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UsePatternMatching
             : base(IDEDiagnosticIds.InlineAsTypeCheckId,
                    EnforceOnBuildValues.InlineAsType,
                    CSharpCodeStyleOptions.PreferPatternMatchingOverAsWithNullCheck,
-                   LanguageNames.CSharp,
                    new LocalizableResourceString(
                         nameof(CSharpAnalyzersResources.Use_pattern_matching), CSharpAnalyzersResources.ResourceManager, typeof(CSharpAnalyzersResources)))
         {
@@ -53,15 +52,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UsePatternMatching
 
             // "x is Type y" is only available in C# 7.0 and above. Don't offer this refactoring
             // in projects targeting a lesser version.
-            if (((CSharpParseOptions)syntaxTree.Options).LanguageVersion < LanguageVersion.CSharp7)
+            if (syntaxTree.Options.LanguageVersion() < LanguageVersion.CSharp7)
             {
                 return;
             }
 
-            var options = syntaxContext.Options;
-            var cancellationToken = syntaxContext.CancellationToken;
-
-            var styleOption = options.GetOption(CSharpCodeStyleOptions.PreferPatternMatchingOverAsWithNullCheck, syntaxTree, cancellationToken);
+            var styleOption = syntaxContext.GetCSharpAnalyzerOptions().PreferPatternMatchingOverAsWithNullCheck;
             if (!styleOption.Value)
             {
                 // Bail immediately if the user has disabled this feature.
@@ -92,6 +88,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UsePatternMatching
                 }
             }
 
+            var cancellationToken = syntaxContext.CancellationToken;
             if (semanticModel.GetSymbolInfo(comparison, cancellationToken).GetAnySymbol().IsUserDefinedOperator())
             {
                 return;

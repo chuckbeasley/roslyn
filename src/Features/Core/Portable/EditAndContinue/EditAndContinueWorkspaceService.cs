@@ -13,7 +13,7 @@ using Microsoft.CodeAnalysis.Emit;
 using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 using Microsoft.CodeAnalysis.Text;
-using Microsoft.VisualStudio.Debugger.Contracts.EditAndContinue;
+using Microsoft.CodeAnalysis.EditAndContinue.Contracts;
 using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.EditAndContinue
@@ -85,7 +85,7 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
 
         public async ValueTask<DebuggingSessionId> StartDebuggingSessionAsync(
             Solution solution,
-            IManagedEditAndContinueDebuggerService debuggerService,
+            IManagedHotReloadService debuggerService,
             ImmutableArray<DocumentId> captureMatchingDocuments,
             bool captureAllMatchingDocuments,
             bool reportDiagnostics,
@@ -152,29 +152,6 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
                 (s, arg, cancellationToken) => s.GetDocumentDiagnosticsAsync(arg.document, arg.activeStatementSpanProvider, cancellationToken),
                 (document, activeStatementSpanProvider),
                 cancellationToken);
-        }
-
-        /// <summary>
-        /// Determine whether updates have been made to projects containing the specified file (or all projects that are built,
-        /// if <paramref name="sourceFilePath"/> is null).
-        /// </summary>
-        public ValueTask<bool> HasChangesAsync(
-            DebuggingSessionId sessionId,
-            Solution solution,
-            ActiveStatementSpanProvider activeStatementSpanProvider,
-            string? sourceFilePath,
-            CancellationToken cancellationToken)
-        {
-            // GetStatusAsync is called outside of edit session when the debugger is determining
-            // whether a source file checksum matches the one in PDB.
-            // The debugger expects no changes in this case.
-            var debuggingSession = TryGetDebuggingSession(sessionId);
-            if (debuggingSession == null)
-            {
-                return default;
-            }
-
-            return debuggingSession.EditSession.HasChangesAsync(solution, activeStatementSpanProvider, sourceFilePath, cancellationToken);
         }
 
         public ValueTask<EmitSolutionUpdateResults> EmitSolutionUpdateAsync(

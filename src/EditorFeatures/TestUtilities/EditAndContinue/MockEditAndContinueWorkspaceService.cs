@@ -9,7 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.Text;
-using Microsoft.VisualStudio.Debugger.Contracts.EditAndContinue;
+using Microsoft.CodeAnalysis.EditAndContinue.Contracts;
 
 namespace Microsoft.CodeAnalysis.EditAndContinue.UnitTests
 {
@@ -23,10 +23,9 @@ namespace Microsoft.CodeAnalysis.EditAndContinue.UnitTests
         public Func<Solution, ActiveStatementSpanProvider, ManagedInstructionId, LinePositionSpan?>? GetCurrentActiveStatementPositionImpl;
 
         public Func<TextDocument, ActiveStatementSpanProvider, ImmutableArray<ActiveStatementSpan>>? GetAdjustedActiveStatementSpansImpl;
-        public Func<Solution, IManagedEditAndContinueDebuggerService, ImmutableArray<DocumentId>, bool, bool, DebuggingSessionId>? StartDebuggingSessionImpl;
+        public Func<Solution, IManagedHotReloadService, ImmutableArray<DocumentId>, bool, bool, DebuggingSessionId>? StartDebuggingSessionImpl;
 
         public ActionOut<ImmutableArray<DocumentId>>? EndDebuggingSessionImpl;
-        public Func<Solution, ActiveStatementSpanProvider, string?, bool>? HasChangesImpl;
         public Func<Solution, ActiveStatementSpanProvider, EmitSolutionUpdateResults>? EmitSolutionUpdateImpl;
         public Func<Solution, ManagedInstructionId, bool?>? IsActiveStatementInExceptionRegionImpl;
         public Action<Document>? OnSourceFileUpdatedImpl;
@@ -77,16 +76,13 @@ namespace Microsoft.CodeAnalysis.EditAndContinue.UnitTests
         public ValueTask<ImmutableArray<Diagnostic>> GetDocumentDiagnosticsAsync(Document document, ActiveStatementSpanProvider activeStatementSpanProvider, CancellationToken cancellationToken)
             => new((GetDocumentDiagnosticsImpl ?? throw new NotImplementedException()).Invoke(document, activeStatementSpanProvider));
 
-        public ValueTask<bool> HasChangesAsync(DebuggingSessionId sessionId, Solution solution, ActiveStatementSpanProvider activeStatementSpanProvider, string? sourceFilePath, CancellationToken cancellationToken)
-            => new((HasChangesImpl ?? throw new NotImplementedException()).Invoke(solution, activeStatementSpanProvider, sourceFilePath));
-
         public ValueTask<bool?> IsActiveStatementInExceptionRegionAsync(DebuggingSessionId sessionId, Solution solution, ManagedInstructionId instructionId, CancellationToken cancellationToken)
             => new((IsActiveStatementInExceptionRegionImpl ?? throw new NotImplementedException()).Invoke(solution, instructionId));
 
         public void OnSourceFileUpdated(Document document)
             => OnSourceFileUpdatedImpl?.Invoke(document);
 
-        public ValueTask<DebuggingSessionId> StartDebuggingSessionAsync(Solution solution, IManagedEditAndContinueDebuggerService debuggerService, ImmutableArray<DocumentId> captureMatchingDocuments, bool captureAllMatchingDocuments, bool reportDiagnostics, CancellationToken cancellationToken)
+        public ValueTask<DebuggingSessionId> StartDebuggingSessionAsync(Solution solution, IManagedHotReloadService debuggerService, ImmutableArray<DocumentId> captureMatchingDocuments, bool captureAllMatchingDocuments, bool reportDiagnostics, CancellationToken cancellationToken)
             => new((StartDebuggingSessionImpl ?? throw new NotImplementedException()).Invoke(solution, debuggerService, captureMatchingDocuments, captureAllMatchingDocuments, reportDiagnostics));
     }
 }

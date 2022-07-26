@@ -13,15 +13,13 @@ namespace Microsoft.CodeAnalysis
     {
         public SourceGeneratedDocumentIdentity Identity { get; }
         public string HintName => Identity.HintName;
-        public string SourceGeneratorAssemblyName => Identity.GeneratorAssemblyName;
-        public string SourceGeneratorTypeName => Identity.GeneratorTypeName;
 
         public static SourceGeneratedDocumentState Create(
             SourceGeneratedDocumentIdentity documentIdentity,
             SourceText generatedSourceText,
             ParseOptions parseOptions,
             HostLanguageServices languageServices,
-            SolutionServices solutionServices)
+            HostWorkspaceServices solutionServices)
         {
             var textAndVersion = TextAndVersion.Create(generatedSourceText, VersionStamp.Create());
             var textSource = new ConstantValueSource<TextAndVersion>(textAndVersion);
@@ -36,7 +34,7 @@ namespace Microsoft.CodeAnalysis
                 documentIdentity,
                 languageServices,
                 solutionServices,
-                documentServiceProvider: null,
+                documentServiceProvider: SourceGeneratedTextDocumentServiceProvider.Instance,
                 new DocumentInfo.DocumentAttributes(
                     documentIdentity.DocumentId,
                     name: documentIdentity.HintName,
@@ -53,7 +51,7 @@ namespace Microsoft.CodeAnalysis
         private SourceGeneratedDocumentState(
             SourceGeneratedDocumentIdentity documentIdentity,
             HostLanguageServices languageServices,
-            SolutionServices solutionServices,
+            HostWorkspaceServices solutionServices,
             IDocumentServiceProvider? documentServiceProvider,
             DocumentInfo.DocumentAttributes attributes,
             ParseOptions options,
@@ -88,6 +86,44 @@ namespace Microsoft.CodeAnalysis
                 parseOptions,
                 this.LanguageServices,
                 this.solutionServices);
+        }
+
+        /// <summary>
+        /// This is modeled after <see cref="DefaultTextDocumentServiceProvider"/>, but sets
+        /// <see cref="IDocumentOperationService.CanApplyChange"/> to <see langword="false"/> for source generated
+        /// documents.
+        /// </summary>
+        internal sealed class SourceGeneratedTextDocumentServiceProvider : IDocumentServiceProvider
+        {
+            public static readonly SourceGeneratedTextDocumentServiceProvider Instance = new();
+
+            private SourceGeneratedTextDocumentServiceProvider()
+            {
+            }
+
+            public TService? GetService<TService>()
+                where TService : class, IDocumentService
+            {
+                if (SourceGeneratedDocumentOperationService.Instance is TService documentOperationService)
+                {
+                    return documentOperationService;
+                }
+
+                if (DocumentPropertiesService.Default is TService documentPropertiesService)
+                {
+                    return documentPropertiesService;
+                }
+
+                return null;
+            }
+
+            private class SourceGeneratedDocumentOperationService : IDocumentOperationService
+            {
+                public static readonly SourceGeneratedDocumentOperationService Instance = new();
+
+                public bool CanApplyChange => false;
+                public bool SupportDiagnostics => true;
+            }
         }
     }
 }

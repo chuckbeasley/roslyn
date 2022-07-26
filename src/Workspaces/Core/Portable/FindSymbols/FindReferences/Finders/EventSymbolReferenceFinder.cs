@@ -15,7 +15,7 @@ namespace Microsoft.CodeAnalysis.FindSymbols.Finders
         protected override bool CanFind(IEventSymbol symbol)
             => true;
 
-        protected sealed override Task<ImmutableArray<ISymbol>> DetermineCascadedSymbolsAsync(
+        protected sealed override ValueTask<ImmutableArray<ISymbol>> DetermineCascadedSymbolsAsync(
             IEventSymbol symbol,
             Solution solution,
             FindReferencesSearchOptions options,
@@ -30,7 +30,7 @@ namespace Microsoft.CodeAnalysis.FindSymbols.Finders
                                                             .WhereAsArray(n => symbol.Equals(n.AssociatedSymbol))
                                                             .CastArray<ISymbol>();
 
-            return Task.FromResult(backingFields.Concat(associatedNamedTypes));
+            return new(backingFields.Concat(associatedNamedTypes));
         }
 
         protected sealed override async Task<ImmutableArray<Document>> DetermineDocumentsToSearchAsync(
@@ -42,19 +42,17 @@ namespace Microsoft.CodeAnalysis.FindSymbols.Finders
             CancellationToken cancellationToken)
         {
             var documentsWithName = await FindDocumentsAsync(project, documents, cancellationToken, symbol.Name).ConfigureAwait(false);
-            var documentsWithGlobalAttributes = await FindDocumentsWithGlobalAttributesAsync(project, documents, cancellationToken).ConfigureAwait(false);
+            var documentsWithGlobalAttributes = await FindDocumentsWithGlobalSuppressMessageAttributeAsync(project, documents, cancellationToken).ConfigureAwait(false);
             return documentsWithName.Concat(documentsWithGlobalAttributes);
         }
 
         protected sealed override ValueTask<ImmutableArray<FinderLocation>> FindReferencesInDocumentAsync(
             IEventSymbol symbol,
-            HashSet<string>? globalAliases,
-            Document document,
-            SemanticModel semanticModel,
+            FindReferencesDocumentState state,
             FindReferencesSearchOptions options,
             CancellationToken cancellationToken)
         {
-            return FindReferencesInDocumentUsingSymbolNameAsync(symbol, document, semanticModel, cancellationToken);
+            return FindReferencesInDocumentUsingSymbolNameAsync(symbol, state, cancellationToken);
         }
     }
 }

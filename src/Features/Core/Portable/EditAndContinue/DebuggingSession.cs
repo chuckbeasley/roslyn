@@ -19,7 +19,7 @@ using Microsoft.CodeAnalysis.Internal.Log;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 using Microsoft.CodeAnalysis.Text;
-using Microsoft.VisualStudio.Debugger.Contracts.EditAndContinue;
+using Microsoft.CodeAnalysis.EditAndContinue.Contracts;
 using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.EditAndContinue
@@ -34,6 +34,7 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
 
         /// <summary>
         /// MVIDs read from the assembly built for given project id.
+        /// Only contains ids for projects that support EnC.
         /// </summary>
         private readonly Dictionary<ProjectId, (Guid Mvid, Diagnostic Error)> _projectModuleIds = new();
         private readonly Dictionary<Guid, ProjectId> _moduleIds = new();
@@ -76,14 +77,14 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
         /// </summary>
         internal readonly CommittedSolution LastCommittedSolution;
 
-        internal readonly IManagedEditAndContinueDebuggerService DebuggerService;
+        internal readonly IManagedHotReloadService DebuggerService;
 
         /// <summary>
         /// True if the diagnostics produced by the session should be reported to the diagnotic analyzer.
         /// </summary>
         internal readonly bool ReportDiagnostics;
 
-        private readonly DebuggingSessionTelemetry _telemetry = new();
+        private readonly DebuggingSessionTelemetry _telemetry;
         private readonly EditSessionTelemetry _editSessionTelemetry = new();
 
         private PendingSolutionUpdate? _pendingUpdate;
@@ -98,13 +99,14 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
         internal DebuggingSession(
             DebuggingSessionId id,
             Solution solution,
-            IManagedEditAndContinueDebuggerService debuggerService,
+            IManagedHotReloadService debuggerService,
             Func<Project, CompilationOutputs> compilationOutputsProvider,
             IEnumerable<KeyValuePair<DocumentId, CommittedSolution.DocumentState>> initialDocumentStates,
             bool reportDiagnostics)
         {
             _compilationOutputsProvider = compilationOutputsProvider;
             _reportTelemetry = ReportTelemetry;
+            _telemetry = new DebuggingSessionTelemetry(solution.State.SolutionAttributes.TelemetryId);
 
             Id = id;
             DebuggerService = debuggerService;
@@ -240,10 +242,12 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
         /// </summary>
         /// <returns>
         /// An MVID and an error message to report, in case an IO exception occurred while reading the binary.
-        /// The MVID is default if either project not built, or an it can't be read from the module binary.
+        /// The MVID is <see cref="Guid.Empty"/> if either the project is not built, or the MVID can't be read from the module binary.
         /// </returns>
         internal async Task<(Guid Mvid, Diagnostic? Error)> GetProjectModuleIdAsync(Project project, CancellationToken cancellationToken)
         {
+            Debug.Assert(project.SupportsEditAndContinue());
+
             lock (_projectModuleIdsGuard)
             {
                 if (_projectModuleIds.TryGetValue(project.Id, out var id))
@@ -280,8 +284,14 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
                     return id;
                 }
 
-                _moduleIds[newId.Mvid] = project.Id;
-                return _projectModuleIds[project.Id] = newId;
+                // Do not cache failures. The error might be intermittent and might be corrected next time we attempt to read the MVID.
+                if (newId.Mvid != Guid.Empty)
+                {
+                    _moduleIds[newId.Mvid] = project.Id;
+                    _projectModuleIds[project.Id] = newId;
+                }
+
+                return newId;
             }
         }
 
@@ -582,6 +592,8 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
 
             LastCommittedSolution.CommitSolution(pendingUpdate.Solution);
 
+            _editSessionTelemetry.LogCommitted();
+
             // Restart edit session with no active statements (switching to run mode).
             RestartEditSession(newNonRemappableRegions, inBreakState: false, out documentsToReanalyze);
         }
@@ -612,11 +624,19 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
                     var documentId = documentIds[i];
 
                     var document = await solution.GetTextDocumentAsync(documentId, cancellationToken).ConfigureAwait(false);
-                    if (document?.FilePath == null)
+                    if (document?.State.SupportsEditAndContinue() != true)
                     {
-                        // document has been deleted or has no path (can't have an active statement anymore):
+                        // document has been deleted or doesn't support EnC (can't have an active statement anymore):
                         continue;
                     }
+
+                    if (!document.Project.SupportsEditAndContinue())
+                    {
+                        // document is in a project that does not support EnC
+                        continue;
+                    }
+
+                    Contract.ThrowIfNull(document.FilePath);
 
                     // Multiple documents may have the same path (linked file).
                     // The documents represent the files that #line directives map to.
@@ -639,7 +659,12 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
                     }
 
                     var newProject = solution.GetRequiredProject(projectId);
+
+                    Debug.Assert(oldProject.SupportsEditAndContinue());
+                    Debug.Assert(newProject.SupportsEditAndContinue());
+
                     var analyzer = newProject.LanguageServices.GetRequiredService<IEditAndContinueAnalyzer>();
+
                     await foreach (var documentId in EditSession.GetChangedDocumentsAsync(oldProject, newProject, cancellationToken).ConfigureAwait(false))
                     {
                         cancellationToken.ThrowIfCancellationRequested();
@@ -656,7 +681,7 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
                         var oldDocumentActiveStatements = await baseActiveStatements.GetOldActiveStatementsAsync(analyzer, oldDocument, cancellationToken).ConfigureAwait(false);
 
                         var analysis = await analyzer.AnalyzeDocumentAsync(
-                            LastCommittedSolution.GetRequiredProject(documentId.ProjectId),
+                            oldProject,
                             EditSession.BaseActiveStatements,
                             newDocument,
                             newActiveStatementSpans: ImmutableArray<LinePositionSpan>.Empty,
@@ -733,7 +758,7 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
         {
             try
             {
-                if (_isDisposed || !EditSession.InBreakState || !mappedDocument.State.SupportsEditAndContinue())
+                if (_isDisposed || !EditSession.InBreakState || !mappedDocument.State.SupportsEditAndContinue() || !mappedDocument.Project.SupportsEditAndContinue())
                 {
                     return ImmutableArray<ActiveStatementSpan>.Empty;
                 }
@@ -953,6 +978,10 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
                         return null;
                     }
 
+                    // We only maintain module ids for projects that support EnC:
+                    Debug.Assert(oldProject.SupportsEditAndContinue());
+                    Debug.Assert(newProject.SupportsEditAndContinue());
+
                     documentId = await GetChangedDocumentContainingUnmappedActiveStatementAsync(activeStatementsMap, LastCommittedSolution, oldProject, newProject, baseActiveStatement, cancellationToken).ConfigureAwait(false);
                 }
                 else
@@ -970,8 +999,10 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
                         // TODO: https://github.com/dotnet/roslyn/issues/1204
                         // oldProject == null ==> project has been added - it may have active statements if the project was unloaded when debugging session started but the sources 
                         // correspond to the PDB.
-                        var id = (oldProject != null) ? await GetChangedDocumentContainingUnmappedActiveStatementAsync(
-                        activeStatementsMap, LastCommittedSolution, oldProject, newProject, baseActiveStatement, linkedTokenSource.Token).ConfigureAwait(false) : null;
+                        var id = (oldProject?.SupportsEditAndContinue() == true) ?
+                            await GetChangedDocumentContainingUnmappedActiveStatementAsync(
+                                activeStatementsMap, LastCommittedSolution, oldProject, newProject, baseActiveStatement, linkedTokenSource.Token).ConfigureAwait(false) :
+                            null;
 
                         Interlocked.CompareExchange(ref documentId, id, null);
                         if (id != null)
@@ -1005,6 +1036,9 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
         private static async ValueTask<DocumentId?> GetChangedDocumentContainingUnmappedActiveStatementAsync(ActiveStatementsMap baseActiveStatements, CommittedSolution oldSolution, Project oldProject, Project newProject, ActiveStatement activeStatement, CancellationToken cancellationToken)
         {
             Debug.Assert(oldProject.Id == newProject.Id);
+            Debug.Assert(oldProject.SupportsEditAndContinue());
+            Debug.Assert(newProject.SupportsEditAndContinue());
+
             var analyzer = newProject.LanguageServices.GetRequiredService<IEditAndContinueAnalyzer>();
 
             await foreach (var documentId in EditSession.GetChangedDocumentsAsync(oldProject, newProject, cancellationToken).ConfigureAwait(false))
@@ -1020,7 +1054,7 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
                 }
 
                 var oldActiveStatements = await baseActiveStatements.GetOldActiveStatementsAsync(analyzer, oldDocument, cancellationToken).ConfigureAwait(false);
-                if (oldActiveStatements.Any(s => s.Statement == activeStatement))
+                if (oldActiveStatements.Any(static (s, activeStatement) => s.Statement == activeStatement, activeStatement))
                 {
                     return documentId;
                 }
@@ -1032,7 +1066,7 @@ namespace Microsoft.CodeAnalysis.EditAndContinue
         private static void ReportTelemetry(DebuggingSessionTelemetry.Data data)
         {
             // report telemetry (fire and forget):
-            _ = Task.Run(() => DebuggingSessionTelemetry.Log(data, Logger.Log, LogAggregator.GetNextId));
+            _ = Task.Run(() => DebuggingSessionTelemetry.Log(data, Logger.Log, CorrelationIdFactory.GetNextId));
         }
 
         internal TestAccessor GetTestAccessor()

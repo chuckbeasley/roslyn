@@ -12,6 +12,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.FindSymbols;
+using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.LanguageServices;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Shared.Extensions;
@@ -33,15 +34,17 @@ namespace Microsoft.CodeAnalysis.CodeLens
         /// never actually call into this member.
         /// </summary>
         private static readonly FindReferencesSearchOptions s_nonParallelSearch =
-            FindReferencesSearchOptions.Default.With(
-                @explicit: false,
-                unidirectionalHierarchyCascade: true);
+            FindReferencesSearchOptions.Default with
+            {
+                Explicit = false,
+                UnidirectionalHierarchyCascade = true
+            };
 
         private static async Task<T?> FindAsync<T>(Solution solution, DocumentId documentId, SyntaxNode syntaxNode,
             Func<CodeLensFindReferencesProgress, Task<T>> onResults, Func<CodeLensFindReferencesProgress, Task<T>> onCapped,
             int searchCap, CancellationToken cancellationToken) where T : struct
         {
-            var document = solution.GetDocument(documentId);
+            var document = await solution.GetDocumentAsync(documentId, includeSourceGenerated: true, cancellationToken).ConfigureAwait(false);
             if (document == null)
             {
                 return null;
@@ -192,10 +195,7 @@ namespace Microsoft.CodeAnalysis.CodeLens
                 }
             }
 
-            if (node == null)
-            {
-                node = token.Parent;
-            }
+            node ??= token.Parent;
 
             return langServices.GetDisplayNode(node);
         }
@@ -277,8 +277,8 @@ namespace Microsoft.CodeAnalysis.CodeLens
             CancellationToken cancellationToken)
         {
             var document = solution.GetDocument(syntaxNode.GetLocation().SourceTree);
-
-            using (solution.Services.CacheService?.EnableCaching(document.Project.Id))
+            var cacheService = solution.Services.GetService<IProjectCacheHostService>();
+            using (cacheService?.EnableCaching(document.Project.Id))
             {
                 var semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
                 var declaredSymbol = semanticModel.GetDeclaredSymbol(syntaxNode, cancellationToken);
