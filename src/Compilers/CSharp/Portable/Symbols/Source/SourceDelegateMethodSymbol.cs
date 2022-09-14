@@ -293,7 +293,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     _refCustomModifiers = ImmutableArray<CustomModifier>.Empty;
                 }
 
-                InitializeParameters(parameters);
+                InitializeParameters(parameters.Cast<SourceParameterSymbol, ParameterSymbol>());
             }
 
             public override string Name
@@ -340,7 +340,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }
 
                 ParameterHelpers.EnsureNativeIntegerAttributeExists(compilation, Parameters, diagnostics, modifyCompilation: true);
-                ParameterHelpers.EnsureLifetimeAnnotationAttributeExists(compilation, Parameters, diagnostics, modifyCompilation: true);
+                ParameterHelpers.EnsureScopedRefAttributeExists(compilation, Parameters, diagnostics, modifyCompilation: true);
 
                 if (compilation.ShouldEmitNullableAttributes(this) &&
                     ReturnTypeWithAnnotations.NeedsNullableAttribute())
