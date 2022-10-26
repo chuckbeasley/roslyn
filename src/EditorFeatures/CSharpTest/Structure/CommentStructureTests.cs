@@ -38,7 +38,7 @@ namespace Microsoft.CodeAnalysis.Editor.CSharp.UnitTests.Structure
                 return CSharpStructureHelpers.CreateCommentBlockSpan(token.TrailingTrivia);
             }
 
-            throw Roslyn.Utilities.ExceptionUtilities.Unreachable;
+            throw Roslyn.Utilities.ExceptionUtilities.Unreachable();
         }
 
         [Fact]
@@ -103,57 +103,6 @@ class C
 
             await VerifyBlockSpansAsync(code,
                 Region("span", "// Hello ...", autoCollapse: true));
-        }
-
-        [Fact]
-        public async Task TestMultilineComment1()
-        {
-            const string code = @"
-{|span:/* Hello
-$$C# */|}
-class C
-{
-}
-";
-
-            await VerifyBlockSpansAsync(code,
-                Region("span", "/* Hello ...", autoCollapse: true));
-        }
-
-        [Fact]
-        public async Task TestMultilineCommentOnOneLine()
-        {
-            const string code = @"
-{|span:/* Hello $$C# */|}
-class C
-{
-}
-";
-
-            await VerifyBlockSpansAsync(code,
-                Region("span", "/* Hello C# ...", autoCollapse: true));
-        }
-
-        [Fact, WorkItem(1108049, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/1108049")]
-        [WorkItem(791, "https://github.com/dotnet/roslyn/issues/791")]
-        public async Task TestIncompleteMultilineCommentZeroSpace()
-        {
-            const string code = @"
-{|span:$$/*|}";
-
-            await VerifyBlockSpansAsync(code,
-                Region("span", "/*  ...", autoCollapse: true));
-        }
-
-        [Fact, WorkItem(1108049, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/1108049")]
-        [WorkItem(791, "https://github.com/dotnet/roslyn/issues/791")]
-        public async Task TestIncompleteMultilineCommentSingleSpace()
-        {
-            const string code = @"
-{|span:$$/* |}";
-
-            await VerifyBlockSpansAsync(code,
-                Region("span", "/*  ...", autoCollapse: true));
         }
     }
 }

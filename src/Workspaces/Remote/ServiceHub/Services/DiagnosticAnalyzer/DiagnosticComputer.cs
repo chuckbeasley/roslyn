@@ -81,8 +81,6 @@ namespace Microsoft.CodeAnalysis.Remote.Diagnostics
                 compilationWithAnalyzers = compilationWithAnalyzers.Compilation.WithAnalyzers(analyzers, compilationWithAnalyzers.AnalysisOptions);
             }
 
-            var cacheService = _project.Solution.Services.GetRequiredService<IProjectCacheService>();
-            using var cache = cacheService.EnableCaching(_project.Id);
             var skippedAnalyzersInfo = _project.GetSkippedAnalyzersInfo(_analyzerInfoCache);
 
             try
@@ -280,7 +278,7 @@ namespace Microsoft.CodeAnalysis.Remote.Diagnostics
             // TODO: can we support analyzerExceptionFilter in remote host? 
             //       right now, host doesn't support watson, we might try to use new NonFatal watson API?
             var analyzerOptions = new CompilationWithAnalyzersOptions(
-                options: new WorkspaceAnalyzerOptions(_project.AnalyzerOptions, _project.Solution, _ideOptions),
+                options: new WorkspaceAnalyzerOptions(_project.AnalyzerOptions, _ideOptions),
                 onAnalyzerException: null,
                 analyzerExceptionFilter: null,
                 concurrentAnalysis: concurrentAnalysis,
