@@ -140,7 +140,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             BoundDynamicIndexerAccess indexerAccess,
             BoundExpression loweredReceiver,
             ImmutableArray<BoundExpression> loweredArguments,
-            ImmutableArray<string> argumentNames,
+            ImmutableArray<string?> argumentNames,
             ImmutableArray<RefKind> refKinds,
             BoundExpression loweredRight,
             bool isCompoundAssignment = false,
@@ -223,12 +223,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case BoundKind.FieldAccess:
                     {
                         Debug.Assert(!isRef || rewrittenLeft.GetRefKind() != RefKind.None);
-                        return new BoundAssignmentOperator(
+                        return _factory.AssignmentExpression(
                             syntax,
                             rewrittenLeft,
                             rewrittenRight,
-                            isRef,
-                            type);
+                            type,
+                            isRef);
                     }
 
                 case BoundKind.DiscardExpression:
@@ -261,7 +261,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 default:
                     {
                         Debug.Assert(!isRef);
-                        return new BoundAssignmentOperator(
+                        return _factory.AssignmentExpression(
                             syntax,
                             rewrittenLeft,
                             rewrittenRight,
@@ -312,7 +312,6 @@ namespace Microsoft.CodeAnalysis.CSharp
                 ref argTempsBuilder);
 
             arguments = MakeArguments(
-                syntax,
                 arguments,
                 property,
                 expanded,
@@ -344,6 +343,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 BoundExpression setterCall = BoundCall.Synthesized(
                     syntax,
                     rewrittenReceiver,
+                    initialBindingReceiverIsSubjectToCloning: ThreeState.Unknown,
                     setMethod,
                     AppendToPossibleNull(arguments, rhsAssignment));
 
@@ -359,6 +359,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 BoundCall setterCall = BoundCall.Synthesized(
                     syntax,
                     rewrittenReceiver,
+                    initialBindingReceiverIsSubjectToCloning: ThreeState.Unknown,
                     setMethod,
                     AppendToPossibleNull(arguments, rewrittenRight));
 
