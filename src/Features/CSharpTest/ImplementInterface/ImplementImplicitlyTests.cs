@@ -11,19 +11,20 @@ using Microsoft.CodeAnalysis.CodeRefactorings;
 using Microsoft.CodeAnalysis.CSharp.ImplementInterface;
 using Microsoft.CodeAnalysis.Editor.CSharp.UnitTests.CodeRefactorings;
 using Microsoft.CodeAnalysis.Test.Utilities;
+using Microsoft.CodeAnalysis.Testing;
 using Roslyn.Test.Utilities;
 using Xunit;
 
 namespace Microsoft.CodeAnalysis.Editor.CSharp.UnitTests.ImplementInterface
 {
     [Trait(Traits.Feature, Traits.Features.CodeActionsImplementInterface)]
-    public class ImplementImplicitlyTests : AbstractCSharpCodeActionTest
+    public class ImplementImplicitlyTests : AbstractCSharpCodeActionTest_NoEditor
     {
         private const int SingleMember = 0;
         private const int SameInterface = 1;
         private const int AllInterfaces = 2;
 
-        protected override CodeRefactoringProvider CreateCodeRefactoringProvider(Workspace workspace, TestParameters parameters)
+        protected override CodeRefactoringProvider CreateCodeRefactoringProvider(TestWorkspace workspace, TestParameters parameters)
             => new CSharpImplementImplicitlyCodeRefactoringProvider();
 
         protected override ImmutableArray<CodeAction> MassageActions(ImmutableArray<CodeAction> actions)
@@ -259,6 +260,26 @@ namespace Microsoft.CodeAnalysis.Editor.CSharp.UnitTests.ImplementInterface
                 class C : IGoo
                 {
                     public readonly void Goo1() { }
+                }
+                """);
+        }
+
+        [Fact, WorkItem("https://github.com/dotnet/roslyn/issues/70232")]
+        public async Task TestMissingWhenAlreadyContainingImpl()
+        {
+            await TestMissingAsync(
+                """
+                interface I
+                {
+                    event System.EventHandler Click;
+                }
+
+                class C : I
+                {
+                    event System.EventHandler I.Click { add { } remove { } }
+
+                    event System.EventHandler [||]I.Click
+
                 }
                 """);
         }

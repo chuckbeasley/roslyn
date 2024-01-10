@@ -247,8 +247,8 @@ function BuildSolution() {
   # that MSBuild output as well as ones that custom tasks output.
   $msbuildWarnAsError = if ($warnAsError) { "/warnAsError" } else { "" }
 
-  # Workaround for some machines in the AzDO pool not allowing long paths (%5c is msbuild escaped backslash)
-  $ibcDir = Join-Path $RepoRoot ".o%5c"
+  # Workaround for some machines in the AzDO pool not allowing long paths
+  $ibcDir = $RepoRoot
 
   # Set DotNetBuildFromSource to 'true' if we're simulating building for source-build.
   $buildFromSource = if ($sourceBuild) { "/p:DotNetBuildFromSource=true" } else { "" }
@@ -258,8 +258,6 @@ function BuildSolution() {
 
   $restoreUseStaticGraphEvaluation = $true
   
-  $isNpmAvailable = IsNpmAvailable
-
   try {
     MSBuild $toolsetBuildProj `
       $bl `
@@ -282,7 +280,6 @@ function BuildSolution() {
       /p:RestoreUseStaticGraphEvaluation=$restoreUseStaticGraphEvaluation `
       /p:VisualStudioIbcDrop=$ibcDropName `
       /p:VisualStudioDropAccessToken=$officialVisualStudioDropAccessToken `
-      /p:IsNpmPackable=$isNpmAvailable `
       $suppressExtensionDeployment `
       $msbuildWarnAsError `
       $buildFromSource `
@@ -542,8 +539,13 @@ function EnablePreviewSdks() {
 # Deploy our core VSIX libraries to Visual Studio via the Roslyn VSIX tool.  This is an alternative to
 # deploying at build time.
 function Deploy-VsixViaTool() {
-  $vsixDir = Get-PackageDir "RoslynTools.VSIXExpInstaller"
-  $vsixExe = Join-Path $vsixDir "tools\VsixExpInstaller.exe"
+
+  $vsixExe = Join-Path $ArtifactsDir "bin\RunTests\$configuration\net7.0\VSIXExpInstaller\VSIXExpInstaller.exe"
+  Write-Host "VSIX EXE path: " $vsixExe
+  if (-not (Test-Path $vsixExe)) {
+    Write-Host "VSIX EXE not found: '$vsixExe'." -ForegroundColor Red
+    ExitWithExitCode 1
+  }
 
   $vsInfo = LocateVisualStudio
   if ($vsInfo -eq $null) {
@@ -713,14 +715,6 @@ function List-Processes() {
   Get-Process -Name "devenv" -ErrorAction SilentlyContinue | Out-Host
 }
 
-function IsNpmAvailable() {
-  if (Get-Command "npm" -ErrorAction SilentlyContinue) {
-    return $true
-  }
-
-  return $false;
-}
-
 try {
   if ($PSVersionTable.PSVersion.Major -lt "5") {
     Write-Host "PowerShell version must be 5 or greater (version $($PSVersionTable.PSVersion) detected)"
@@ -805,10 +799,8 @@ catch {
   ExitWithExitCode 1
 }
 finally {
-  if ($ci) {
-    Stop-Processes
+  if (Test-Path Function:\Unsubst-TempDir) {
+    Unsubst-TempDir
   }
-
-  Unsubst-TempDir
   Pop-Location
 }
