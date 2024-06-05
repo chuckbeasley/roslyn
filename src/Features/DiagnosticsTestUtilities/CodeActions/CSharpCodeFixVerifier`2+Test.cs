@@ -13,11 +13,9 @@ using Microsoft.CodeAnalysis.CSharp.Testing;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Testing.Verifiers;
 using Xunit;
-using Microsoft.CodeAnalysis.Test.Utilities;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.Text;
 using System.Collections.Generic;
-using Microsoft.CodeAnalysis.Shared.Utilities;
 
 #if !CODE_STYLE
 using Roslyn.Utilities;
@@ -113,16 +111,18 @@ namespace Microsoft.CodeAnalysis.Editor.UnitTests.CodeActions
 
             protected override FixAllContext CreateFixAllContext(
                 Document? document,
+                TextSpan? diagnosticSpan,
                 Project project,
                 CodeFixProvider codeFixProvider,
                 FixAllScope scope,
                 string? codeActionEquivalenceKey,
                 IEnumerable<string> diagnosticIds,
+                DiagnosticSeverity minimumSeverity,
                 FixAllContext.DiagnosticProvider fixAllDiagnosticProvider,
                 CancellationToken cancellationToken)
                 => new(new FixAllState(
                     fixAllProvider: NoOpFixAllProvider.Instance,
-                    diagnosticSpan: null,
+                    diagnosticSpan,
                     document,
                     project,
                     codeFixProvider,

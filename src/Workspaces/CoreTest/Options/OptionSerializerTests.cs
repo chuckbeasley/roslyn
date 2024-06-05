@@ -5,7 +5,6 @@
 using System;
 using System.Linq;
 using Microsoft.CodeAnalysis.Completion;
-using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Editor.InlineDiagnostics;
 using Microsoft.CodeAnalysis.Editor.Shared.Options;
 using Microsoft.CodeAnalysis.Host;
@@ -76,9 +75,6 @@ public class OptionSerializerTests
             ImplementTypeOptionsStorage.PropertyGenerationBehavior,
             CompletionOptionsStorage.EnterKeyBehavior,
             CompletionOptionsStorage.SnippetsBehavior,
-            InternalDiagnosticsOptionsStorage.RazorDiagnosticMode,
-            InternalDiagnosticsOptionsStorage.LiveShareDiagnosticMode,
-            InternalDiagnosticsOptionsStorage.NormalDiagnosticMode,
         };
 
         foreach (var option in options)

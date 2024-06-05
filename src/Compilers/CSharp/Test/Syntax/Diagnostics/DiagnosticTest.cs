@@ -322,6 +322,8 @@ class X
                         case ErrorCode.WRN_TargetDifferentRefness:
                         case ErrorCode.WRN_RefReadonlyParameterDefaultValue:
                         case ErrorCode.WRN_Experimental:
+                        case ErrorCode.WRN_ConvertingLock:
+                        case ErrorCode.WRN_PartialPropertySignatureDifference:
                             Assert.Equal(1, ErrorFacts.GetWarningLevel(errorCode));
                             break;
                         case ErrorCode.WRN_MainIgnored:
@@ -429,6 +431,11 @@ class X
                         case ErrorCode.WRN_UseDefViolationRefField:
                         case ErrorCode.WRN_CollectionExpressionRefStructMayAllocate:
                         case ErrorCode.WRN_CollectionExpressionRefStructSpreadMayAllocate:
+                        case ErrorCode.WRN_DynamicDispatchToParamsCollectionMethod:
+                        case ErrorCode.WRN_DynamicDispatchToParamsCollectionIndexer:
+                        case ErrorCode.WRN_DynamicDispatchToParamsCollectionConstructor:
+                        case ErrorCode.INF_TooManyBoundLambdas:
+                        case ErrorCode.INF_IdentifierConflictWithContextualKeyword:
                             Assert.Equal(1, ErrorFacts.GetWarningLevel(errorCode));
                             break;
                         case ErrorCode.WRN_InvalidVersionFormat:
@@ -465,6 +472,10 @@ class X
                         case ErrorCode.WRN_ByValArraySizeConstRequired:
                             // These are the warnings introduced with the warning "wave" shipped with dotnet 8 and C# 12.
                             Assert.Equal(8, ErrorFacts.GetWarningLevel(errorCode));
+                            break;
+                        case ErrorCode.WRN_BadYieldInLock:
+                            // These are the warnings introduced with the warning "wave" shipped with dotnet 9 and C# 13.
+                            Assert.Equal(9, ErrorFacts.GetWarningLevel(errorCode));
                             break;
                         default:
                             // If a new warning is added, this test will fail
@@ -2974,6 +2985,7 @@ class Program
                     case ErrorCode.ERR_InterceptableMethodMustBeOrdinary:
                     case ErrorCode.ERR_PossibleAsyncIteratorWithoutYield:
                     case ErrorCode.ERR_PossibleAsyncIteratorWithoutYieldOrAwait:
+                    case ErrorCode.ERR_RefLocalAcrossAwait:
                         Assert.True(isBuildOnly, $"Check failed for ErrorCode.{errorCode}");
                         break;
 

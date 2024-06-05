@@ -8,7 +8,6 @@ using System.Threading;
 using Microsoft.CodeAnalysis.CodeStyle;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.LanguageService;
-using Microsoft.CodeAnalysis.Options;
 using Microsoft.CodeAnalysis.Shared.CodeStyle;
 using Microsoft.CodeAnalysis.Shared.Collections;
 using Microsoft.CodeAnalysis.Shared.Extensions;
@@ -82,9 +81,10 @@ internal abstract partial class AbstractUseCollectionInitializerDiagnosticAnalyz
         isUnnecessary: true);
 
     protected AbstractUseCollectionInitializerDiagnosticAnalyzer()
-        : base(ImmutableDictionary<DiagnosticDescriptor, IOption2>.Empty
-                .Add(s_descriptor, CodeStyleOptions2.PreferCollectionInitializer)
-                .Add(s_unnecessaryCodeDescriptor, CodeStyleOptions2.PreferCollectionInitializer))
+        : base(
+            [
+                (s_descriptor, CodeStyleOptions2.PreferCollectionInitializer)
+            ])
     {
     }
 
@@ -197,6 +197,7 @@ internal abstract partial class AbstractUseCollectionInitializerDiagnosticAnalyz
             s_descriptor,
             objectCreationExpression.GetFirstToken().GetLocation(),
             notification,
+            context.Options,
             additionalLocations: locations,
             properties));
 
@@ -266,6 +267,7 @@ internal abstract partial class AbstractUseCollectionInitializerDiagnosticAnalyz
                 s_unnecessaryCodeDescriptor,
                 additionalUnnecessaryLocations[0],
                 NotificationOption2.ForSeverity(s_unnecessaryCodeDescriptor.DefaultSeverity),
+                context.Options,
                 additionalLocations: locations,
                 additionalUnnecessaryLocations: additionalUnnecessaryLocations,
                 properties));

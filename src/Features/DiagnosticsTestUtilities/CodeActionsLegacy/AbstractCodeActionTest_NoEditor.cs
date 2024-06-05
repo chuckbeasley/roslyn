@@ -14,7 +14,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixesAndRefactorings;
 using Microsoft.CodeAnalysis.CodeRefactorings;
-using Microsoft.CodeAnalysis.Editor.Implementation.Preview;
 using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.PickMembers;
 using Microsoft.CodeAnalysis.PooledObjects;
@@ -105,7 +104,7 @@ namespace Microsoft.CodeAnalysis.Editor.UnitTests.CodeActions
         {
             var provider = CreateCodeRefactoringProvider(workspace, parameters);
 
-            var actions = ArrayBuilder<(CodeAction, TextSpan?)>.GetInstance();
+            using var _ = ArrayBuilder<(CodeAction, TextSpan?)>.GetInstance(out var actions);
 
             var codeActionOptionsProvider = parameters.globalOptions?.IsEmpty() == false
                 ? CodeActionOptionsStorage.GetCodeActionOptionsProvider(workspace.GlobalOptions)
@@ -114,7 +113,6 @@ namespace Microsoft.CodeAnalysis.Editor.UnitTests.CodeActions
             var context = new CodeRefactoringContext(document, selectedOrAnnotatedSpan, (a, t) => actions.Add((a, t)), codeActionOptionsProvider, CancellationToken.None);
             await provider.ComputeRefactoringsAsync(context);
             var result = actions.Count > 0 ? new CodeRefactoring(provider, actions.ToImmutable(), FixAllProviderInfo.Create(provider), codeActionOptionsProvider) : null;
-            actions.Free();
             return result;
         }
 

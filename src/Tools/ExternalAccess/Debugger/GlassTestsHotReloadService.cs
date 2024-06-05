@@ -53,22 +53,22 @@ namespace Microsoft.CodeAnalysis.ExternalAccess.Debugger
 
         public void EnterBreakState()
         {
-            _encService.BreakStateOrCapabilitiesChanged(GetSessionId(), inBreakState: true, out _);
+            _encService.BreakStateOrCapabilitiesChanged(GetSessionId(), inBreakState: true);
         }
 
         public void ExitBreakState()
         {
-            _encService.BreakStateOrCapabilitiesChanged(GetSessionId(), inBreakState: false, out _);
+            _encService.BreakStateOrCapabilitiesChanged(GetSessionId(), inBreakState: false);
         }
 
         public void OnCapabilitiesChanged()
         {
-            _encService.BreakStateOrCapabilitiesChanged(GetSessionId(), inBreakState: null, out _);
+            _encService.BreakStateOrCapabilitiesChanged(GetSessionId(), inBreakState: null);
         }
 
         public void CommitSolutionUpdate()
         {
-            _encService.CommitSolutionUpdate(GetSessionId(), out _);
+            _encService.CommitSolutionUpdate(GetSessionId());
         }
 
         public void DiscardSolutionUpdate()
@@ -78,14 +78,14 @@ namespace Microsoft.CodeAnalysis.ExternalAccess.Debugger
 
         public void EndDebuggingSession()
         {
-            _encService.EndDebuggingSession(GetSessionId(), out _);
+            _encService.EndDebuggingSession(GetSessionId());
             _sessionId = default;
         }
 
         public async ValueTask<ManagedHotReloadUpdates> GetUpdatesAsync(Solution solution, CancellationToken cancellationToken)
         {
             var result = await _encService.EmitSolutionUpdateAsync(GetSessionId(), solution, s_noActiveStatementSpanProvider, cancellationToken).ConfigureAwait(false);
-            var diagnostics = await EmitSolutionUpdateResults.GetHotReloadDiagnosticsAsync(solution, result.Diagnostics.ToDiagnosticData(solution), result.RudeEdits, result.GetSyntaxErrorData(solution), result.ModuleUpdates.Status, cancellationToken).ConfigureAwait(false);
+            var diagnostics = await EmitSolutionUpdateResults.GetAllDiagnosticsAsync(solution, result.Diagnostics.ToDiagnosticData(solution), result.RudeEdits, result.GetSyntaxErrorData(solution), result.ModuleUpdates.Status, cancellationToken).ConfigureAwait(false);
             return new ManagedHotReloadUpdates(result.ModuleUpdates.Updates.FromContract(), diagnostics.FromContract());
         }
     }

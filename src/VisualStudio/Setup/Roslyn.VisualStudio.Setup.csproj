@@ -19,12 +19,6 @@
 
     <!-- VS Insertion -->
     <VisualStudioInsertionComponent>Microsoft.CodeAnalysis.LanguageServices</VisualStudioInsertionComponent>
-  
-    <!-- ServiceHub AssemblyPath -->
-    <!-- Path to our servicehub entry point dll in the vsix directory relative 
-         to our servicehub.servicehub.json files in the same vsix directory -->
-    <ServiceHubAssemblyBasePath>.\</ServiceHubAssemblyBasePath>
-    <ServiceHubHostRuntime>desktop</ServiceHubHostRuntime>
   </PropertyGroup>
   <ItemGroup Label="PkgDef">
     <None Include="PackageRegistration.pkgdef" PkgDefEntry="FileContent" />
@@ -135,14 +129,8 @@
       <PkgDefEntry>BindingRedirect</PkgDefEntry>
       <NgenPriority>1</NgenPriority>
     </ProjectReference>
-    <ProjectReference Include="..\..\Features\LanguageServer\Protocol\Microsoft.CodeAnalysis.LanguageServer.Protocol.csproj">
+    <ProjectReference Include="..\..\LanguageServer\Protocol\Microsoft.CodeAnalysis.LanguageServer.Protocol.csproj">
       <Name>LanguageServerProtocol</Name>
-      <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup;SatelliteDllsProjectOutputGroup</IncludeOutputGroupsInVSIX>
-      <ForceIncludeInVSIX>true</ForceIncludeInVSIX>
-      <PkgDefEntry>BindingRedirect</PkgDefEntry>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Features\LanguageServer\Microsoft.CommonLanguageServerProtocol.Framework\Microsoft.CommonLanguageServerProtocol.Framework.csproj">
-      <Name>Microsoft.CommonLanguageServerProtocolFramework</Name>
       <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup;SatelliteDllsProjectOutputGroup</IncludeOutputGroupsInVSIX>
       <ForceIncludeInVSIX>true</ForceIncludeInVSIX>
       <PkgDefEntry>BindingRedirect</PkgDefEntry>
@@ -178,17 +166,6 @@
       <ForceIncludeInVSIX>true</ForceIncludeInVSIX>
       <AdditionalProperties>TargetFramework=net472</AdditionalProperties>
       <PkgDefEntry>BindingRedirect</PkgDefEntry>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Workspaces\Core\MSBuild.BuildHost\Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.csproj">
-      <Name>Workspaces.MSBuild</Name>
-      <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup;SatelliteDllsProjectOutputGroup</IncludeOutputGroupsInVSIX>
-      <ForceIncludeInVSIX>true</ForceIncludeInVSIX>
-      <AdditionalProperties>TargetFramework=net472</AdditionalProperties>
-      <PkgDefEntry>BindingRedirect</PkgDefEntry>
-      <!-- Don't ngen the BuildHost executable. We don't expect it to be used in Visual Studio scenarios, except for third-party extensions that might be using it.
-           At the moment, it's consumed not as a running executable but rather as a library, and it also has some dependencies for the executable portion, like
-           command line parsing and MSBuildLocator that we don't expect to be shipping either. -->
-      <Ngen>false</Ngen>
     </ProjectReference>
     <ProjectReference Include="..\..\Workspaces\CSharp\Portable\Microsoft.CodeAnalysis.CSharp.Workspaces.csproj">
       <Name>CSharpWorkspace</Name>
@@ -328,6 +305,16 @@
       <IncludeOutputGroupsInVSIX>PublishProjectOutputGroup</IncludeOutputGroupsInVSIX>
       <IncludeOutputGroupsInVSIXLocalOnly></IncludeOutputGroupsInVSIXLocalOnly>
     </ProjectReference>
+    <ProjectReference Include="..\..\Tools\SemanticSearch\ReferenceAssemblies\SemanticSearch.ReferenceAssemblies.csproj">
+      <Name>SemanticSearchRefs</Name>
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+      <VSIXSubPath>SemanticSearchRefs</VSIXSubPath>
+      <IncludeOutputGroupsInVSIX>PublishProjectOutputGroup</IncludeOutputGroupsInVSIX>
+      <IncludeOutputGroupsInVSIXLocalOnly></IncludeOutputGroupsInVSIXLocalOnly>
+      <Ngen>false</Ngen>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Humanizer.Core" IncludeInVsix="true" PkgDefEntry="CodeBase" />
@@ -347,7 +334,6 @@
       <IncludeInVSIX>true</IncludeInVSIX>
       <Visible>false</Visible>
     </Content>
-    <Content Include="UnifiedSettings\*.registration.json" IncludeInVSIX="true" />
   </ItemGroup>
   <ItemGroup>
     <None Include="source.extension.vsixmanifest">

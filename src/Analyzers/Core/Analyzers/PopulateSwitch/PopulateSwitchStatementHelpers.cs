@@ -71,7 +71,7 @@ internal static class PopulateSwitchStatementHelpers
             if (!TryGetAllEnumMembers(switchExpressionType, enumMembers) ||
                 !TryRemoveExistingEnumMembers(switchStatement, enumMembers))
             {
-                return SpecializedCollections.EmptyCollection<ISymbol>();
+                return [];
             }
         }
 
@@ -132,6 +132,14 @@ internal static class PopulateSwitchStatementHelpers
 
                         var caseValue = IntegerUtilities.ToInt64(value.ConstantValue.Value);
                         enumValues.Remove(caseValue);
+
+                        break;
+
+                    case CaseKind.Pattern:
+                        if (((IPatternCaseClauseOperation)clause).Pattern is IBinaryPatternOperation pattern)
+                        {
+                            PopulateSwitchExpressionHelpers.HandleBinaryPattern(pattern, enumValues);
+                        }
 
                         break;
                 }

@@ -86,7 +86,7 @@ namespace Microsoft.CodeAnalysis.LanguageServerIndexFormat.Generator
                 DocumentSymbolProvider,
                 FoldingRangeProvider,
                 DiagnosticProvider,
-                new SemanticTokensCapabilities(SemanticTokensSchema.LegacyTokensSchemaForLSIF.AllTokenTypes, [SemanticTokenModifiers.Static]));
+                new SemanticTokensCapabilities(SemanticTokensSchema.LegacyTokensSchemaForLSIF.AllTokenTypes, [SemanticTokenModifiers.Static, SemanticTokenModifiers.Deprecated]));
             generator._lsifJsonWriter.Write(capabilitiesVertex);
             return generator;
         }
@@ -130,7 +130,10 @@ namespace Microsoft.CodeAnalysis.LanguageServerIndexFormat.Generator
                 }
             };
 
-            var documents = (await project.GetAllRegularAndSourceGeneratedDocumentsAsync(cancellationToken)).ToList();
+            var documents = new List<Document>();
+            await foreach (var document in project.GetAllRegularAndSourceGeneratedDocumentsAsync(cancellationToken))
+                documents.Add(document);
+
             var tasks = new List<Task>();
             foreach (var document in documents)
             {
@@ -482,9 +485,9 @@ namespace Microsoft.CodeAnalysis.LanguageServerIndexFormat.Generator
             // include syntax tokens in the generated data.
             var data = await SemanticTokensHelpers.ComputeSemanticTokensDataAsync(
                 // Just get the pure-lsp semantic tokens here.
-                new VSInternalClientCapabilities { SupportsVisualStudioExtensions = true },
                 document,
-                ranges: null,
+                spans: [],
+                supportsVisualStudioExtensions: true,
                 options: Classification.ClassificationOptions.Default,
                 cancellationToken: CancellationToken.None);
 

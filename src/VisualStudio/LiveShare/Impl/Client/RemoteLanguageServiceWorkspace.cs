@@ -15,9 +15,7 @@ using Microsoft.CodeAnalysis.Editor.Shared.Utilities;
 using Microsoft.CodeAnalysis.ErrorReporting;
 using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.LanguageServer;
-using Microsoft.CodeAnalysis.Options;
 using Microsoft.CodeAnalysis.Shared.Extensions;
-using Microsoft.CodeAnalysis.SolutionCrawler;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.VisualStudio.Composition;
 using Microsoft.VisualStudio.LanguageServices.Implementation.ProjectSystem;
@@ -68,8 +66,6 @@ namespace Microsoft.VisualStudio.LanguageServices.LiveShare.Client
         /// </summary>
         private ImmutableHashSet<string> _registeredExternalPaths;
 
-        private readonly RemoteDiagnosticListTable _remoteDiagnosticListTable;
-
         public bool IsRemoteSession => _session != null;
 
         /// <summary>
@@ -82,28 +78,20 @@ namespace Microsoft.VisualStudio.LanguageServices.LiveShare.Client
             OpenTextBufferProvider openTextBufferProvider,
             IVsFolderWorkspaceService vsFolderWorkspaceService,
             SVsServiceProvider serviceProvider,
-            IDiagnosticService diagnosticService,
             ITableManagerProvider tableManagerProvider,
-            IGlobalOptionService globalOptions,
             IThreadingContext threadingContext)
             : base(VisualStudioMefHostServices.Create(exportProvider), WorkspaceKind.CloudEnvironmentClientWorkspace)
         {
             _serviceProvider = serviceProvider;
 
-            _remoteDiagnosticListTable = new RemoteDiagnosticListTable(globalOptions, threadingContext, serviceProvider, this, diagnosticService, tableManagerProvider);
-
             _openTextBufferProvider = openTextBufferProvider;
             _openTextBufferProvider.AddListener(this);
             _threadingContext = threadingContext;
-
             _vsFolderWorkspaceService = vsFolderWorkspaceService;
 
             _remoteWorkspaceRootPaths = ImmutableHashSet<string>.Empty;
             _registeredExternalPaths = ImmutableHashSet<string>.Empty;
         }
-
-        private IGlobalOptionService GlobalOptions
-            => _remoteDiagnosticListTable.GlobalOptions;
 
         void IOpenTextBufferEventListener.OnOpenDocument(string moniker, ITextBuffer textBuffer, IVsHierarchy? hierarchy) => NotifyOnDocumentOpened(moniker, textBuffer);
 
@@ -125,16 +113,10 @@ namespace Microsoft.VisualStudio.LanguageServices.LiveShare.Client
         {
             _session = session;
 
-            StartSolutionCrawler();
-
             // Get the initial workspace roots and update any files that have been opened.
             await UpdatePathsToRemoteFilesAsync(session).ConfigureAwait(false);
 
             _vsFolderWorkspaceService.OnActiveWorkspaceChanged += OnActiveWorkspaceChangedAsync;
-            session.RemoteServicesChanged += (object sender, RemoteServicesChangedEventArgs e) =>
-            {
-                _remoteDiagnosticListTable.UpdateWorkspaceDiagnosticsPresent(_session.RemoteServiceNames.Contains("workspaceDiagnostics"));
-            };
         }
 
         public string? GetRemoteExternalRoot(string filePath)
@@ -191,7 +173,7 @@ namespace Microsoft.VisualStudio.LanguageServices.LiveShare.Client
 #pragma warning disable CS8602 // Dereference of a possibly null reference. (Can localRoot be null here?)
                 var splitRoot = localRoot.TrimEnd('\\').Split('\\');
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
-                splitRoot[splitRoot.Length - 1] = "~external";
+                splitRoot[^1] = "~external";
                 var externalPath = string.Join("\\", splitRoot) + "\\";
 
                 remoteRootPaths.Add(localRoot);
@@ -205,7 +187,6 @@ namespace Microsoft.VisualStudio.LanguageServices.LiveShare.Client
         {
             _session = null;
             _vsFolderWorkspaceService.OnActiveWorkspaceChanged -= OnActiveWorkspaceChangedAsync;
-            StopSolutionCrawler();
 
             // Clear the remote paths on end of session.  Live share handles closing all the files.
             using (s_RemotePathsGate.DisposableWait())
@@ -509,39 +490,26 @@ namespace Microsoft.VisualStudio.LanguageServices.LiveShare.Client
                 {
                     // The edits would get sent by the co-authoring service to the owner.
                     // The invisible editor saves the file on being disposed, which should get reflected  on the owner's side.
-                    using (var invisibleEditor = new InvisibleEditor(_serviceProvider, document.FilePath!, hierarchy: null,
-                                                 needsSave: true, needsUndoDisabled: false))
-                    {
-                        UpdateText(invisibleEditor.TextBuffer, text);
-                    }
+                    using var invisibleEditor = new InvisibleEditor(_serviceProvider, document.FilePath!, hierarchy: null,
+                                                 needsSave: true, needsUndoDisabled: false);
+                    UpdateText(invisibleEditor.TextBuffer, text);
                 }
             }
         }
 
         private static void UpdateText(ITextBuffer textBuffer, SourceText text)
         {
-            using (var edit = textBuffer.CreateEdit(EditOptions.DefaultMinimalChange, reiteratedVersionNumber: null, editTag: null))
+            using var edit = textBuffer.CreateEdit(EditOptions.DefaultMinimalChange, reiteratedVersionNumber: null, editTag: null);
+            var oldSnapshot = textBuffer.CurrentSnapshot;
+            var oldText = oldSnapshot.AsText();
+            var changes = text.GetTextChanges(oldText);
+
+            foreach (var change in changes)
             {
-                var oldSnapshot = textBuffer.CurrentSnapshot;
-                var oldText = oldSnapshot.AsText();
-                var changes = text.GetTextChanges(oldText);
-
-                foreach (var change in changes)
-                {
-                    edit.Replace(change.Span.Start, change.Span.Length, change.NewText);
-                }
-
-                edit.Apply();
+                edit.Replace(change.Span.Start, change.Span.Length, change.NewText);
             }
-        }
 
-        private void StartSolutionCrawler()
-        {
-            if (GlobalOptions.GetOption(SolutionCrawlerRegistrationService.EnableSolutionCrawler))
-                DiagnosticProvider.Enable(this);
+            edit.Apply();
         }
-
-        private void StopSolutionCrawler()
-            => DiagnosticProvider.Disable(this);
     }
 }

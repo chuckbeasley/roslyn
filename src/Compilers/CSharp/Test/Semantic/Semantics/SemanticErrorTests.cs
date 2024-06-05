@@ -4010,6 +4010,12 @@ class Test
                 // (24,17): error CS0136: A local or parameter named 'value' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter
                 //             int value = 0; // CS0136
                 Diagnostic(ErrorCode.ERR_LocalIllegallyOverrides, "value").WithArguments("value").WithLocation(24, 17),
+                // (24,17): info CS9258: 'value' is a contextual keyword, with a specific meaning, starting in language version preview. Use '@value' to avoid a breaking change when compiling with language version preview or later.
+                //             int value = 0; // CS0136
+                Diagnostic(ErrorCode.INF_IdentifierConflictWithContextualKeyword, "value = 0").WithArguments("value", "preview").WithLocation(24, 17),
+                // (25,15): info CS9258: 'value' is a contextual keyword, with a specific meaning, starting in language version preview. Use '@value' to avoid a breaking change when compiling with language version preview or later.
+                //             M(value);
+                Diagnostic(ErrorCode.INF_IdentifierConflictWithContextualKeyword, "value").WithArguments("value", "preview").WithLocation(25, 15),
                 // (30,35): error CS0136: A local or parameter named 'q' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter
                 //         System.Func<int, int> f = q=>q; // 0136
                 Diagnostic(ErrorCode.ERR_LocalIllegallyOverrides, "q").WithArguments("q").WithLocation(30, 35));
@@ -7092,6 +7098,9 @@ struct S
     {
         this.value += value;
     }
+    void Add(string value)
+    {
+    }
 }
 ";
             CreateCompilationWithMscorlib40AndSystemCore(source, parseOptions: TestOptions.Regular10).VerifyDiagnostics(
@@ -7162,6 +7171,9 @@ struct S
     void Add(int value)
     {
         this.value += value;
+    }
+    void Add(string value)
+    {
     }
 }
 ";
@@ -7263,15 +7275,15 @@ public class C
 }";
             var comp = CreateCompilationWithMscorlib40AndSystemCore(source);
             comp.VerifyDiagnostics(
-                // (10,14): error CS4013: Instance of type 'System.RuntimeArgumentHandle' cannot be used inside an anonymous function, query expression, iterator block or async method
+                // (10,14): error CS4013: Instance of type 'RuntimeArgumentHandle' cannot be used inside a nested function, query expression, iterator block or async method
                 //     f = x=>f(__arglist);
-                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "__arglist").WithArguments("System.RuntimeArgumentHandle"),
-                // (11,29): error CS4013: Instance of type 'System.RuntimeArgumentHandle' cannot be used inside an anonymous function, query expression, iterator block or async method
+                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "__arglist").WithArguments("System.RuntimeArgumentHandle").WithLocation(10, 14),
+                // (11,29): error CS4013: Instance of type 'RuntimeArgumentHandle' cannot be used inside a nested function, query expression, iterator block or async method
                 //     f = delegate { return f(__arglist); };
-                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "__arglist").WithArguments("System.RuntimeArgumentHandle"),
-                // (12,44): error CS4013: Instance of type 'System.RuntimeArgumentHandle' cannot be used inside an anonymous function, query expression, iterator block or async method
+                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "__arglist").WithArguments("System.RuntimeArgumentHandle").WithLocation(11, 29),
+                // (12,44): error CS4013: Instance of type 'RuntimeArgumentHandle' cannot be used inside a nested function, query expression, iterator block or async method
                 //     var q = from x in new int[10] select f(__arglist);
-                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "__arglist").WithArguments("System.RuntimeArgumentHandle")
+                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "__arglist").WithArguments("System.RuntimeArgumentHandle").WithLocation(12, 44)
                 );
         }
 
@@ -7298,12 +7310,12 @@ public class C
   }
 }";
             CreateCompilationWithMscorlib45(source).VerifyEmitDiagnostics(
-                // (10,34): error CS4013: Instance of type 'System.RuntimeArgumentHandle' cannot be used inside an anonymous function, query expression, iterator block or async method
+                // (10,34): error CS4013: Instance of type 'RuntimeArgumentHandle' cannot be used inside a nested function, query expression, iterator block or async method
                 //       RuntimeArgumentHandle h2 = h; // Bad use of h
-                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "h").WithArguments("System.RuntimeArgumentHandle"),
-                // (11,43): error CS4013: Instance of type 'System.RuntimeArgumentHandle' cannot be used inside an anonymous function, query expression, iterator block or async method
+                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "h").WithArguments("System.RuntimeArgumentHandle").WithLocation(10, 34),
+                // (11,43): error CS4013: Instance of type 'RuntimeArgumentHandle' cannot be used inside a nested function, query expression, iterator block or async method
                 //       ArgIterator args1 = new ArgIterator(h); // Bad use of h
-                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "h").WithArguments("System.RuntimeArgumentHandle"));
+                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "h").WithArguments("System.RuntimeArgumentHandle").WithLocation(11, 43));
         }
 
         [Fact]
@@ -7315,9 +7327,9 @@ using System.Collections.Generic;
 public class C
 {
   static void N(RuntimeArgumentHandle x) {}
-  static IEnumerable<int> M(RuntimeArgumentHandle h1) // Error: hoisted to field
+  static IEnumerable<int> M(RuntimeArgumentHandle h1)
   {
-    N(h1);
+    N(h1); // Error: hoisted to field
     yield return 1;
     RuntimeArgumentHandle h2 = default(RuntimeArgumentHandle);
     yield return 2;
@@ -7333,12 +7345,12 @@ public class C
 
             CreateCompilation(source).Emit(new System.IO.MemoryStream()).Diagnostics
                 .Verify(
-                // (7,51): error CS4013: Instance of type 'System.RuntimeArgumentHandle' cannot be used inside an anonymous function, query expression, iterator block or async method
-                //   static IEnumerable<int> M(RuntimeArgumentHandle h1) // Error: hoisted to field
-                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "h1").WithArguments("System.RuntimeArgumentHandle"),
-                // (13,7): error CS4013: Instance of type 'System.RuntimeArgumentHandle' cannot be used inside an anonymous function, query expression, iterator block or async method
+                // (9,7): error CS4007: Instance of type 'System.RuntimeArgumentHandle' cannot be preserved across 'await' or 'yield' boundary.
+                //     N(h1); // Error: hoisted to field
+                Diagnostic(ErrorCode.ERR_ByRefTypeAndAwait, "h1").WithArguments("System.RuntimeArgumentHandle").WithLocation(9, 7),
+                // (13,7): error CS4007: Instance of type 'System.RuntimeArgumentHandle' cannot be preserved across 'await' or 'yield' boundary.
                 //     N(h2); // Error: hoisted to field
-                Diagnostic(ErrorCode.ERR_SpecialByRefInLambda, "h2").WithArguments("System.RuntimeArgumentHandle")
+                Diagnostic(ErrorCode.ERR_ByRefTypeAndAwait, "h2").WithArguments("System.RuntimeArgumentHandle").WithLocation(13, 7)
                 );
         }
 
@@ -11984,7 +11996,7 @@ public class C
         }
 
         [Fact]
-        public void CS0762ERR_PartialMethodToDelegate()
+        public void CS0762ERR_PartialMethodToDelegate_01()
         {
             var text = @"
 public delegate void TestDel();
@@ -12004,6 +12016,52 @@ public delegate void TestDel();
 ";
             DiagnosticsUtils.VerifyErrorsAndGetCompilationWithMscorlib(text,
                 new ErrorDescription[] { new ErrorDescription { Code = (int)ErrorCode.ERR_PartialMethodToDelegate, Line = 11, Column = 38 } });
+        }
+
+        [WorkItem("https://github.com/dotnet/roslyn/issues/72431")]
+        [Fact]
+        public void CS0762ERR_PartialMethodToDelegate_02()
+        {
+            var source = """
+                delegate void D();
+                partial class Program
+                {
+                    static void Main()
+                    {
+                        M1(M2<int>);
+                    }
+                    static void M1(D d) { }
+                    static partial void M2<T>();
+                }
+                """;
+            var comp = CreateCompilation(source);
+            comp.VerifyEmitDiagnostics(
+                // (6,12): error CS0762: Cannot create delegate from method 'Program.M2<int>()' because it is a partial method without an implementing declaration
+                //         M1(M2<int>);
+                Diagnostic(ErrorCode.ERR_PartialMethodToDelegate, "M2<int>").WithArguments("Program.M2<int>()").WithLocation(6, 12));
+        }
+
+        [WorkItem("https://github.com/dotnet/roslyn/issues/72431")]
+        [Fact]
+        public void CS0762ERR_PartialMethodToDelegate_03()
+        {
+            var source = """
+                delegate void D();
+                partial class C<T>
+                {
+                    static void M1()
+                    {
+                        M2(C<int>.M3);
+                    }
+                    static void M2(D d) { }
+                    static partial void M3();
+                }
+                """;
+            var comp = CreateCompilation(source);
+            comp.VerifyEmitDiagnostics(
+                // (6,12): error CS0762: Cannot create delegate from method 'C<int>.M3()' because it is a partial method without an implementing declaration
+                //         M2(C<int>.M3);
+                Diagnostic(ErrorCode.ERR_PartialMethodToDelegate, "C<int>.M3").WithArguments("C<int>.M3()").WithLocation(6, 12));
         }
 
         [Fact]
@@ -15266,35 +15324,48 @@ class C
 {
    IEnumerator<int> IteratorMeth() {
       int i;
-      unsafe  // CS1629
+      unsafe
       {
          int *p = &i;
          yield return *p;
       }
    }
 
-    unsafe IEnumerator<int> IteratorMeth2() {   // CS1629
+    unsafe IEnumerator<int> IteratorMeth2() {
         yield break;
     }
 }
 ";
-            CreateCompilation(text, options: TestOptions.UnsafeReleaseDll).VerifyDiagnostics(
-                // (7,7): error CS1629: Unsafe code may not appear in iterators
-                //       unsafe  // CS1629
-                Diagnostic(ErrorCode.ERR_IllegalInnerUnsafe, "unsafe"),
-                // (9,10): error CS1629: Unsafe code may not appear in iterators
+            CreateCompilation(text, options: TestOptions.UnsafeReleaseDll, parseOptions: TestOptions.Regular12).VerifyDiagnostics(
+                // (7,7): error CS8652: The feature 'ref and unsafe in async and iterator methods' is currently in Preview and *unsupported*. To use Preview features, use the 'preview' language version.
+                //       unsafe
+                Diagnostic(ErrorCode.ERR_FeatureInPreview, "unsafe").WithArguments("ref and unsafe in async and iterator methods").WithLocation(7, 7),
+                // (9,10): error CS8652: The feature 'ref and unsafe in async and iterator methods' is currently in Preview and *unsupported*. To use Preview features, use the 'preview' language version.
                 //          int *p = &i;
-                Diagnostic(ErrorCode.ERR_IllegalInnerUnsafe, "int *"),
-                // (9,19): error CS1629: Unsafe code may not appear in iterators
+                Diagnostic(ErrorCode.ERR_FeatureInPreview, "int *").WithArguments("ref and unsafe in async and iterator methods").WithLocation(9, 10),
+                // (9,19): error CS8652: The feature 'ref and unsafe in async and iterator methods' is currently in Preview and *unsupported*. To use Preview features, use the 'preview' language version.
                 //          int *p = &i;
-                Diagnostic(ErrorCode.ERR_IllegalInnerUnsafe, "&i"),
-                // (10,24): error CS1629: Unsafe code may not appear in iterators
+                Diagnostic(ErrorCode.ERR_FeatureInPreview, "&i").WithArguments("ref and unsafe in async and iterator methods").WithLocation(9, 19),
+                // (10,24): error CS8652: The feature 'ref and unsafe in async and iterator methods' is currently in Preview and *unsupported*. To use Preview features, use the 'preview' language version.
                 //          yield return *p;
-                Diagnostic(ErrorCode.ERR_IllegalInnerUnsafe, "p"),
-                // (14,29): error CS1629: Unsafe code may not appear in iterators
-                //     unsafe IEnumerator<int> IteratorMeth2() {   // CS1629
-                Diagnostic(ErrorCode.ERR_IllegalInnerUnsafe, "IteratorMeth2")
+                Diagnostic(ErrorCode.ERR_FeatureInPreview, "p").WithArguments("ref and unsafe in async and iterator methods").WithLocation(10, 24),
+                // (14,29): error CS8652: The feature 'ref and unsafe in async and iterator methods' is currently in Preview and *unsupported*. To use Preview features, use the 'preview' language version.
+                //     unsafe IEnumerator<int> IteratorMeth2() {
+                Diagnostic(ErrorCode.ERR_FeatureInPreview, "IteratorMeth2").WithArguments("ref and unsafe in async and iterator methods").WithLocation(14, 29)
                 );
+
+            var expectedDiagnostics = new[]
+            {
+                // (9,20): error CS9239: The '&' operator cannot be used on parameters or local variables in iterator methods.
+                //          int *p = &i;
+                Diagnostic(ErrorCode.ERR_AddressOfInIterator, "i").WithLocation(9, 20),
+                // (10,10): error CS9238: Cannot use 'yield return' in an 'unsafe' block
+                //          yield return *p;
+                Diagnostic(ErrorCode.ERR_BadYieldInUnsafe, "yield").WithLocation(10, 10)
+            };
+
+            CreateCompilation(text, options: TestOptions.UnsafeReleaseDll, parseOptions: TestOptions.RegularNext).VerifyDiagnostics(expectedDiagnostics);
+            CreateCompilation(text, options: TestOptions.UnsafeReleaseDll).VerifyDiagnostics(expectedDiagnostics);
         }
 
         [Fact]
@@ -18361,12 +18432,43 @@ class A
         // CS1970ERR_ExplicitDynamicAttr --> AttributeTests_Dynamic.ExplicitDynamicAttribute
 
         [Fact]
-        public void CS1971ERR_NoDynamicPhantomOnBase()
+        public void CS1971ERR_NoDynamicPhantomOnBase_01()
+        {
+            const string text = @"
+public class B
+{
+    public virtual void M(object o) { System.Console.Write(""Called""); }
+}
+public class D : B
+{
+    public override void M(object o) {}
+
+    void N(dynamic d)
+    {
+        base.M(d);
+    }
+
+    static void Main()
+    {
+        new D().N(1);
+    }
+}
+";
+            var comp = CreateCompilation(text, targetFramework: TargetFramework.StandardAndCSharp, options: TestOptions.DebugExe);
+            comp.VerifyDiagnostics(
+                // (12,9): error CS1971: The call to method 'M' needs to be dynamically dispatched, but cannot be because it is part of a base access expression. Consider casting the dynamic arguments or eliminating the base access.
+                //         base.M(d);
+                Diagnostic(ErrorCode.ERR_NoDynamicPhantomOnBase, "base.M(d)").WithArguments("M"));
+        }
+
+        [Fact]
+        public void CS1971ERR_NoDynamicPhantomOnBase_02()
         {
             const string text = @"
 public class B
 {
     public virtual void M(object o) {}
+    public void M(int o) {}
 }
 public class D : B
 {
@@ -18380,16 +18482,16 @@ public class D : B
 ";
             var comp = CreateCompilationWithMscorlib40AndSystemCore(text);
             comp.VerifyDiagnostics(
-                // (12,9): error CS1971: The call to method 'M' needs to be dynamically dispatched, but cannot be because it is part of a base access expression. Consider casting the dynamic arguments or eliminating the base access.
+                // (13,9): error CS1971: The call to method 'M' needs to be dynamically dispatched, but cannot be because it is part of a base access expression. Consider casting the dynamic arguments or eliminating the base access.
                 //         base.M(d);
                 Diagnostic(ErrorCode.ERR_NoDynamicPhantomOnBase, "base.M(d)").WithArguments("M"));
         }
 
         [Fact]
-        public void CS1972ERR_NoDynamicPhantomOnBaseIndexer()
+        public void CS1972ERR_NoDynamicPhantomOnBaseIndexer_01()
         {
             const string text = @"
-public class B
+public partial class B
 {
     public string this[int index]
     {
@@ -18404,6 +18506,13 @@ public class D : B
         int s = base[(dynamic)o];
     }
 }
+public partial class B
+{
+    public string this[long index]
+    {
+        get { return ""You passed "" + index; }
+    }
+}
 ";
 
             var comp = CreateCompilationWithMscorlib40AndSystemCore(text);
@@ -18414,7 +18523,67 @@ public class D : B
         }
 
         [Fact]
-        public void CS1973ERR_BadArgTypeDynamicExtension()
+        public void CS1972ERR_NoDynamicPhantomOnBaseIndexer_02()
+        {
+            const string text = @"
+public class B
+{
+    public string this[int index]
+    {
+        get { return ""You passed "" + index; }
+    }
+}
+public class D : B
+{
+    static void Main()
+    {
+        D d = new D();
+        System.Console.Write(d.M(1));
+    }
+
+    public string M(object o)
+    {
+        return base[(dynamic)o];
+    }
+}
+";
+
+            var comp = CreateCompilation(text, targetFramework: TargetFramework.StandardAndCSharp, options: TestOptions.DebugExe);
+            comp.VerifyDiagnostics(
+                // (19,16): error CS1972: The indexer access needs to be dynamically dispatched, but cannot be because it is part of a base access expression. Consider casting the dynamic arguments or eliminating the base access.
+                //         int s = base[(dynamic)o];
+                Diagnostic(ErrorCode.ERR_NoDynamicPhantomOnBaseIndexer, "base[(dynamic)o]"));
+        }
+
+        [Fact]
+        public void CS1973ERR_BadArgTypeDynamicExtension_01()
+        {
+            const string text = @"
+class Program
+{
+    static void Main()
+    {
+        dynamic d = 1;
+        B b = new B();
+        b.Goo(d);
+    }
+}
+public class B { }
+static public class Extension
+{
+    public static void Goo(this B b, int x) { System.Console.Write(""Called""); }
+}";
+
+            var comp = CreateCompilation(text, targetFramework: TargetFramework.StandardAndCSharp, options: TestOptions.DebugExe);
+            comp.VerifyDiagnostics(
+                // (8,9): error CS1973: 'B' has no applicable method named 'Goo' but appears to have an extension method by that name. Extension methods cannot be dynamically dispatched. Consider casting the dynamic arguments or calling the extension method without the extension method syntax.
+                //         b.Goo(d);
+                Diagnostic(ErrorCode.ERR_BadArgTypeDynamicExtension, "b.Goo(d)").WithArguments("B", "Goo").WithLocation(8, 9)
+                );
+        }
+
+        [Fact]
+        public void CS1973ERR_BadArgTypeDynamicExtension_02()
         {
             const string text = @"
 class Program
@@ -18430,11 +18599,12 @@ public class B { }
 static public class Extension
 {
     public static void Goo(this B b, int x) { }
+    public static void Goo(this B b, long x) { }
 }";
 
             var comp = CreateCompilationWithMscorlib40AndSystemCore(text);
             comp.VerifyDiagnostics(
-// (8,9): error CS1973: 'B' has no applicable method named 'Goo' but appears to have an extension method by that name. Extension methods cannot be dynamically dispatched. Consider casting the dynamic arguments or calling the extension method without the extension method syntax.
+// (9,9): error CS1973: 'B' has no applicable method named 'Goo' but appears to have an extension method by that name. Extension methods cannot be dynamically dispatched. Consider casting the dynamic arguments or calling the extension method without the extension method syntax.
 //         b.Goo(d);
 Diagnostic(ErrorCode.ERR_BadArgTypeDynamicExtension, "b.Goo(d)").WithArguments("B", "Goo"));
         }
@@ -18445,10 +18615,10 @@ Diagnostic(ErrorCode.ERR_BadArgTypeDynamicExtension, "b.Goo(d)").WithArguments("
             var text = @"
 class A
 {
-    public A(int x)
-    {
+    public A(int x) {}
 
-    }
+    public A(long x) {}
+
 }
 class B : A
 {
@@ -18473,6 +18643,8 @@ class B
     { }
 
     public B(int a, int b)
+    { }
+    public B(long a, int b)
     { }
 }
 ";
@@ -18536,7 +18708,11 @@ class C
         new C(delegate { }, y);
     }
  
-    public C(Action a, Action y)
+    public C(Action a, int y)
+    {
+    }
+ 
+    public C(Action a, long y)
     {
     }
 }";
@@ -18574,15 +18750,27 @@ unsafe  class C : IEnumerable<object>
 
     public static void SomeStaticMethod() {}
 
-    public void Add(dynamic d, int x, int* ptr)
+    public void Add(int d, int x, int* ptr)
     {
     }
 
-    public void Add(dynamic d, RuntimeArgumentHandle x)
+    public void Add(long d, int x, int* ptr)
     {
     }
 
-    public void Add(dynamic d, Action f)
+    public void Add(int d, RuntimeArgumentHandle x)
+    {
+    }
+
+    public void Add(long d, RuntimeArgumentHandle x)
+    {
+    }
+
+    public void Add(int d, Action f)
+    {
+    }
+
+    public void Add(long d, Action f)
     {
     }
 
@@ -18613,7 +18801,7 @@ unsafe  class C : IEnumerable<object>
                 Diagnostic(ErrorCode.ERR_BadDynamicMethodArg, "__arglist").WithArguments("System.RuntimeArgumentHandle").WithLocation(18, 18),
                 // (19,13): error CS1950: The best overloaded Add method 'C.Add(dynamic, RuntimeArgumentHandle)' for the collection initializer has some invalid arguments
                 //             { d, GetEnumerator },
-                Diagnostic(ErrorCode.ERR_BadArgTypesForCollectionAdd, "{ d, GetEnumerator }").WithArguments("C.Add(dynamic, System.RuntimeArgumentHandle)").WithLocation(19, 13),
+                Diagnostic(ErrorCode.ERR_BadArgTypesForCollectionAdd, "{ d, GetEnumerator }").WithArguments("C.Add(int, System.RuntimeArgumentHandle)").WithLocation(19, 13),
                 // (19,18): error CS1503: Argument 2: cannot convert from 'method group' to 'RuntimeArgumentHandle'
                 //             { d, GetEnumerator },
                 Diagnostic(ErrorCode.ERR_BadArgType, "GetEnumerator").WithArguments("2", "method group", "System.RuntimeArgumentHandle").WithLocation(19, 18),
@@ -22530,7 +22718,7 @@ public class List<T>
         }
 
         [Fact]
-        public void CS1974WRN_DynamicDispatchToConditionalMethod()
+        public void CS1974WRN_DynamicDispatchToConditionalMethod_01()
         {
             var text = @"
 using System.Diagnostics;
@@ -22540,6 +22728,38 @@ class Myclass
     {
         dynamic d = null;
         // Warning because Goo might be conditional.
+        Goo(d); 
+        // No warning; only the two-parameter Bar is conditional.
+        Bar(d);
+    }
+
+    [Conditional(""DEBUG"")]
+    static void Goo(string d) {}
+    static void Goo(long d) {}
+    [Conditional(""DEBUG"")]
+    static void Bar(int x, int y) {}
+    
+    static void Bar(string x) {}
+}";
+
+            var comp = CreateCompilationWithMscorlib40AndSystemCore(text);
+            comp.VerifyDiagnostics(
+// (9,9): warning CS1974: The dynamically dispatched call to method 'Goo' may fail at runtime because one or more applicable overloads are conditional methods.
+//         Goo(d); 
+Diagnostic(ErrorCode.WRN_DynamicDispatchToConditionalMethod, "Goo(d)").WithArguments("Goo"));
+        }
+
+        [Fact]
+        public void CS1974WRN_DynamicDispatchToConditionalMethod_02()
+        {
+            var text = @"
+using System.Diagnostics;
+class Myclass
+{
+    static void Main()
+    {
+        dynamic d = null;
+        // No warning because Goo is statically bound.
         Goo(d); 
         // No warning; only the two-parameter Bar is conditional.
         Bar(d);

@@ -337,6 +337,12 @@
                 case ErrorCode.WRN_Experimental:
                 case ErrorCode.WRN_CollectionExpressionRefStructMayAllocate:
                 case ErrorCode.WRN_CollectionExpressionRefStructSpreadMayAllocate:
+                case ErrorCode.WRN_ConvertingLock:
+                case ErrorCode.WRN_DynamicDispatchToParamsCollectionMethod:
+                case ErrorCode.WRN_DynamicDispatchToParamsCollectionIndexer:
+                case ErrorCode.WRN_DynamicDispatchToParamsCollectionConstructor:
+                case ErrorCode.WRN_BadYieldInLock:
+                case ErrorCode.WRN_PartialPropertySignatureDifference:
                     return true;
                 default:
                     return false;
@@ -365,6 +371,8 @@
             switch (code)
             {
                 case ErrorCode.INF_UnableToLoadSomeTypesInAnalyzer:
+                case ErrorCode.INF_TooManyBoundLambdas:
+                case ErrorCode.INF_IdentifierConflictWithContextualKeyword:
                     return true;
                 default:
                     return false;

@@ -17,14 +17,16 @@ It is not reasonable for us to take the union of all TFM and multi-target every 
 
 Projects in our repository should include the following values in `<TargetFramework(s)>` based on the rules below:
 
-1. `$(NetRoslynSourceBuild)`: code that needs to be part of source build. This property will change based on whether the code is building in a source build context or official builds. In official builds this will include the TFMs for `$(NetVSShared)`
+1. `$(NetRoslynSourceBuild)`: code that needs to be part of source build. This property will change based on whether the code is building in a source build context or official builds. 
+  a. In official builds this will include the TFMs for `$(NetVSShared)`
+  b. In source builds this will include `$(NetRoslyn)`
 2. `$(NetVS)`: code that needs to execute on the private runtime of Visual Studio.
 3. `$(NetVSCode)`: code that needs to execute in DevKit host
 4. `$(NetVSShared)`: code that needs to execute in both Visual Studio and VS Code but does not need to be source built.
-5. `$(NetRoslynToolset)`: packages that ship the Roslyn toolset. The compiler often builds against multiple target frameworks. This property controls which of those frameworks are shipped in the toolset packages. This value will potentially change in source builds.
+5. `$(NetRoslyn)`: code that needs to execute on .NET but does not have any specific product deployment requirements. For example utilities that are used by our infra, compiler unit tests, etc ... This property also controls which of the frameworks the compiler builds against are shipped in the toolset packages. This value will potentially change in source builds.
 6. `$(NetRoslynAll)`: code, generally test utilities, that need to build for all .NET runtimes that we support.
-7. `$(NetRoslyn)`: code that needs to execute on .NET but does not have any specific product deployment requirements. For example utilities that are used by our infra, compiler unit tests, etc ...
-8. `$(NetRoslynBuildHostNetCoreVersion)`: the target used for the .NET Core BuildHost process used by MSBuildWorkspace.
+7. `$(NetRoslynBuildHostNetCoreVersion)`: the target used for the .NET Core BuildHost process used by MSBuildWorkspace.
+8. `$(NetRoslynNext)`: code that needs to run on the next .NET Core version. This is used during the transition to a new .NET Core version where we need to move forward but don't want to hard code a .NET Core TFM into the build files.
 
 This properties `$(NetCurrent)`, `$(NetPrevious)` and `$(NetMinimum)` are not used in our project files because they change in ways that make it hard for us to maintain corect product deployments. Our product ships on VS and VS Code which are not captured by arcade `$(Net...)` macros. Further as the arcade properties change it's very easy for us to end up with duplicate entries in a `<TargetFarmeworks>` setting. Instead our repo uses the above values and when inside source build or VMR our properties are initialized with arcade properties.
 
@@ -57,7 +59,7 @@ This problem primarily comes from our use of polyfill APIs. To avoid this we emp
 
 This comes up in two forms:
 
-### Pattern for types 
+### Pattern for types
 
 When creating a polyfill for a type use the `#if !NET...` to declare the type and in the `#else` use a `TypeForwardedTo` for the actual type.
 
@@ -98,6 +100,13 @@ When creating a polyfill for an extension use the `#if NET...` to declare the ex
 #endif
 ```
 
+## Transitioning to new .NET SDK
 
+As the .NET team approaches releasing a new .NET SDK the Roslyn team will begin using preview versions of that SDK in our build. This will often lead to test failures in our CI system due to underlying behavior changes in the runtime. These failures will often not show up when running in Visual Studio due to the way the runtime for the test runner is chosen.
 
+To ensure we have a simple developer environment such project should be moved to to the `$(NetRoslynNext)` target framework. That ensures the new runtime is loaded when running tests locally.
+
+When the .NET SDK RTMs and Roslyn adopts it all occurrences of `$(NetRoslynNext)` will be moved to simply `$(NetRoslyn)`.
+
+**DO NOT** include both `$(NetRoslyn)` and `$(NetRoslynNext)` in the same project unless there is a very specific reason that both tests are adding value. The most common case is that the runtime has changed behavior and we simply need to update our baselines to match it. Adding extra TFMs for this just increases test time for very little gain.
 
