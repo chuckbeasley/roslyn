@@ -19,14 +19,12 @@ internal abstract partial class AbstractGenerateConstructorFromMembersCodeRefact
         AbstractGenerateConstructorFromMembersCodeRefactoringProvider service,
         Document document,
         State state,
-        bool addNullChecks,
-        CleanCodeGenerationOptionsProvider fallbackOptions) : CodeAction
+        bool addNullChecks) : CodeAction
     {
         private readonly AbstractGenerateConstructorFromMembersCodeRefactoringProvider _service = service;
         private readonly Document _document = document;
         private readonly State _state = state;
         private readonly bool _addNullChecks = addNullChecks;
-        private readonly CleanCodeGenerationOptionsProvider _fallbackOptions = fallbackOptions;
 
         protected override async Task<Document> GetChangedDocumentAsync(CancellationToken cancellationToken)
         {
@@ -44,7 +42,7 @@ internal abstract partial class AbstractGenerateConstructorFromMembersCodeRefact
 
             var semanticModel = await _document.GetRequiredSemanticModelAsync(cancellationToken).ConfigureAwait(false);
             var syntaxTree = semanticModel.SyntaxTree;
-            var preferThrowExpression = await _service.PrefersThrowExpressionAsync(_document, _fallbackOptions, cancellationToken).ConfigureAwait(false);
+            var preferThrowExpression = await _service.PrefersThrowExpressionAsync(_document, cancellationToken).ConfigureAwait(false);
 
             var members = factory.CreateMemberDelegatingConstructor(
                 semanticModel,
@@ -72,8 +70,7 @@ internal abstract partial class AbstractGenerateConstructorFromMembersCodeRefact
                     _document.Project.Solution,
                     new CodeGenerationContext(
                         contextLocation: syntaxTree.GetLocation(_state.TextSpan),
-                        afterThisLocation: afterThisLocation),
-                    _fallbackOptions),
+                        afterThisLocation: afterThisLocation)),
                 _state.ContainingType,
                 members,
                 cancellationToken).ConfigureAwait(false);
@@ -90,12 +87,12 @@ internal abstract partial class AbstractGenerateConstructorFromMembersCodeRefact
 
                 if (_state.DelegatedConstructor == null)
                 {
-                    return string.Format(FeaturesResources.Generate_constructor_0_1,
+                    return string.Format(CodeFixesResources.Generate_constructor_0_1,
                         _state.ContainingType.Name, parameterString);
                 }
                 else
                 {
-                    return string.Format(FeaturesResources.Generate_field_assigning_constructor_0_1,
+                    return string.Format(CodeFixesResources.Generate_field_assigning_constructor_0_1,
                         _state.ContainingType.Name, parameterString);
                 }
             }
