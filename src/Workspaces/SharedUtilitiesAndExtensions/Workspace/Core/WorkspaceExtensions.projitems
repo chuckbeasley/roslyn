@@ -10,7 +10,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)CodeCleanup\CodeCleanupOptionsProviders.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)CodeGeneration\CodeGenerationOptionsProvider.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CodeGeneration\CleanCodeGenerationOptions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CodeGeneration\CodeAndImportGenerationOptionsProviders.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CodeGeneration\CodeGenerationOptionsProviders.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CodeRefactorings\AbstractRefactoringHelpersService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CodeRefactorings\CodeRefactoringHelpers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CodeRefactorings\IRefactoringHelpersService.cs" />
@@ -18,9 +20,14 @@
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\IMethodSymbolExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\IParameterSymbolExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\IPropertySymbolExtensions.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Extensions\ITypeSymbolExtensions.CompilationTypeGenerator.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Extensions\ITypeSymbolExtensions.SubstituteTypesVisitor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Extensions\SyntaxGeneratorExtensions_CreateEqualsMethod.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)FindSymbols\LinkedFileReferenceLocationEqualityComparer.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Formatting\DocumentFormattingOptionsProviders.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Formatting\ISyntaxFormattingService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Indentation\IndentationOptionsProviders.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)LanguageServices\InitializeParameter\AbstractInitializerParameterService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)LanguageServices\InitializeParameter\IInitializeParameterService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)LanguageServices\InitializeParameter\InitializeParameterHelpersCore.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)NamingStyles\NamingStylePreferencesProviders.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Options\MemberDisplayOptions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Progress\CodeAnalysisProgressExtensions.cs" />
@@ -40,7 +47,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)CodeGeneration\CodeGenerator.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CodeGeneration\ICodeGenerationService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CodeGeneration\INamedTypeSymbolExtensions.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)CodeGeneration\ITypeGenerator.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CodeGeneration\LiteralSpecialValues.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CodeGeneration\NullableSyntaxAnnotation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CodeGeneration\Symbols\CodeGenerationAbstractMethodSymbol.cs" />
@@ -84,8 +90,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\ContextQuery\SyntaxContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\HostWorkspaceServicesExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\ISymbolExtensions.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Extensions\ITypeSymbolExtensions.CollectTypeParameterSymbolsVisitor.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Extensions\ITypeSymbolExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\KnownTypes.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\StringBuilderExtensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\SyntaxGeneratorExtensions.cs" />
@@ -138,8 +142,10 @@
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\MefHostServicesHelpers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Simplification\Simplifiers\AbstractMemberAccessExpressionSimplifier.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Simplification\Simplifiers\AbstractSimplifier.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)SymbolFinder\SymbolFinderInternal.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Utilities\AsyncSymbolVisitor.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Utilities\AsyncSymbolVisitor`1.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Utilities\NullableHelpers.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Utilities\ParsedDocument.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Utilities\SemanticDocument.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Utilities\SyntacticDocument.cs" />

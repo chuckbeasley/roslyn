@@ -55,6 +55,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\NameSyntaxExtensions.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\ObjectCreationExpressionExtensions.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\ParameterSyntaxExtensions.vb" />
+    <Compile Include="$(MSBuildThisFileDirectory)Extensions\SemanticModelExtensions.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\SimpleNameSyntaxExtensions.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\StringExtensions.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions\SymbolDisplayPartExtensions.vb" />
@@ -66,9 +67,11 @@
     <Compile Include="$(MSBuildThisFileDirectory)Indentation\SpecialFormattingOperation.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)Indentation\VisualBasicIndentationService.Indenter.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)Indentation\VisualBasicIndentationService.vb" />
+    <Compile Include="$(MSBuildThisFileDirectory)LanguageServices\InitializeParameter\InitializeParameterHelpers.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)LanguageServices\VisualBasicBlockFactsService.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)LanguageServices\VisualBasicFileBannerFactsService.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)LanguageServices\VisualBasicHeaderFactsService.vb" />
+    <Compile Include="$(MSBuildThisFileDirectory)LanguageServices\InitializeParameter\VisualBasicInitializeParameterService.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)LanguageServices\VisualBasicMoveDeclarationNearReferenceService.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)LanguageServices\VisualBasicRemoveUnnecessaryImportsService.vb" />
     <Compile Include="$(MSBuildThisFileDirectory)LanguageServices\VisualBasicAddImportsService.vb" />
@@ -103,5 +106,8 @@
   </ItemGroup>
   <ItemGroup Condition="'$(DefaultLanguageSourceExtension)' != '' AND '$(BuildingInsideVisualStudio)' != 'true'">
     <ExpectedCompile Include="$(MSBuildThisFileDirectory)**\*$(DefaultLanguageSourceExtension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="$(MSBuildThisFileDirectory)LanguageServices\InitializeParameter\" />
   </ItemGroup>
 </Project>
