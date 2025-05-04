@@ -6,12 +6,9 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.CodeAnalysis.CodeCleanup;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Options;
 using Microsoft.CodeAnalysis.PooledObjects;
@@ -29,7 +26,6 @@ namespace Microsoft.CodeAnalysis.LanguageServer.Handler.Diagnostics;
 /// <typeparam name="TReport">The LSP type that is reported via IProgress</typeparam>
 /// <typeparam name="TReturn">The LSP type that is returned on completion of the request.</typeparam>
 internal abstract partial class AbstractPullDiagnosticHandler<TDiagnosticsParams, TReport, TReturn>(
-    IDiagnosticAnalyzerService diagnosticAnalyzerService,
     IDiagnosticsRefresher diagnosticRefresher,
     IGlobalOptionService globalOptions)
     : ILspServiceRequestHandler<TDiagnosticsParams, TReturn?>
@@ -46,7 +42,6 @@ internal abstract partial class AbstractPullDiagnosticHandler<TDiagnosticsParams
     private readonly IDiagnosticsRefresher _diagnosticRefresher = diagnosticRefresher;
 
     protected readonly IGlobalOptionService GlobalOptions = globalOptions;
-    protected readonly IDiagnosticAnalyzerService DiagnosticAnalyzerService = diagnosticAnalyzerService;
 
     /// <summary>
     /// Map of diagnostic category to the diagnostics cache for that category.
@@ -123,7 +118,8 @@ internal abstract partial class AbstractPullDiagnosticHandler<TDiagnosticsParams
             var handlerName = $"{this.GetType().Name}(category: {category})";
             context.TraceInformation($"{handlerName} started getting diagnostics");
 
-            var versionedCache = _categoryToVersionedCache.GetOrAdd(handlerName, static handlerName => new(handlerName));
+            var versionedCache = _categoryToVersionedCache.GetOrAdd(
+                handlerName, static (handlerName, globalOptions) => new(globalOptions, handlerName), GlobalOptions);
 
             // Get the set of results the request said were previously reported.  We can use this to determine both
             // what to skip, and what files we have to tell the client have been removed.

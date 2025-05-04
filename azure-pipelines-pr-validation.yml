@@ -13,12 +13,18 @@ parameters:
   type: number
 - name: CommitSHA
   type: string
+- name: EnforceLatestCommit
+  type: boolean
+  default: true
 - name: VisualStudioBranchName
   type: string
   default: default
 - name: OptionalTitlePrefix
   type: string
   default: '[PR Validation]'
+- name: VisualStudioCherryPickSHA
+  type: string
+  default: '(default)'
 - name: InsertToolset
   type: boolean
   default: true
@@ -95,7 +101,7 @@ extends:
 
           - output: pipelineArtifact
             displayName: 'Publish Ngen Logs'
-            condition: succeeded()
+            condition: and(succeeded(), ${{ not(parameters.SkipApplyOptimizationData) }})
             targetPath: '$(Build.SourcesDirectory)\artifacts\log\$(BuildConfiguration)\ngen'
             artifactName: 'NGen Logs'
             publishLocation: Container
@@ -195,7 +201,7 @@ extends:
           displayName: Setup branch for insertion validation
           inputs:
             filePath: 'eng\setup-pr-validation.ps1'
-            arguments: '-sourceBranchName $(SourceBranchName) -prNumber ${{ parameters.PRNumber }} -commitSHA ${{ parameters.CommitSHA }}'
+            arguments: "-sourceBranchName $(SourceBranchName) -prNumber ${{ parameters.PRNumber }} -commitSHA ${{ parameters.CommitSHA }} -enforceLatestCommit ${{ iif(parameters.EnforceLatestCommit, '1', '0') }}"
           condition: succeeded()
 
         - powershell: Write-Host "##vso[task.setvariable variable=VisualStudio.DropName]Products/$(System.TeamProject)/$(Build.Repository.Name)/$(SourceBranchName)/$(OriginalBuildNumber)"
@@ -239,7 +245,7 @@ extends:
                        -configuration $(BuildConfiguration)
                        -officialBuildId $(OriginalBuildNumber)
                        -officialSkipTests $(SkipTests)
-                       -officialSkipApplyOptimizationData $(SkipApplyOptimizationData)
+                       -officialSkipApplyOptimizationData ${{ parameters.SkipApplyOptimizationData }}
                        -officialSourceBranchName $(SourceBranchName)
                        -officialIbcDrop $(IbcDrop)
                        -officialVisualStudioDropAccessToken $(_DevDivDropAccessToken)
@@ -320,6 +326,7 @@ extends:
             queueSpeedometerValidation: true
             dropPath: '$(Pipeline.Workspace)\VSSetup'
             retainInsertedBuild: false
+            cherryPick: ${{ parameters.VisualStudioCherryPickSHA }}
         # Arcade is done so we can set BuildNumber back
         - powershell: Write-Host "##vso[build.updatebuildnumber]$(FancyBuildNumber)"
           displayName: Reset BuildNumber
